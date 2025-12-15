@@ -2,13 +2,16 @@
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    env:
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs="-Xmx4g"
 
     steps:
       - name: Checkout
@@ -23,11 +26,14 @@ jobs:
           java-version: 17
           cache: gradle
 
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses || true
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
       - name: Build (lint + unit tests + APKs)
-        run: ./gradlew lint test assembleDebug assembleRelease
+        run: ./gradlew lint test assembleDebug assembleRelease --no-daemon
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
