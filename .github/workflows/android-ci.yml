@@ -22,13 +22,11 @@ jobs:
           cache: gradle
 
       - name: Prepare Gradle Wrapper (ensures wrapper JAR)
-        working-directory: tmm-relay-android
         run: |
           chmod +x gradlew
           ./gradlew wrapper --gradle-version 8.7
 
       - name: Ensure AndroidX properties
-        working-directory: tmm-relay-android
         run: |
           cat <<'EOF' > gradle.properties
           android.useAndroidX=true
@@ -38,7 +36,6 @@ jobs:
           cat gradle.properties
 
       - name: Build (lint + unit tests + APKs)
-        working-directory: tmm-relay-android
         run: |
           ./gradlew lint test assembleDebug assembleRelease
 
