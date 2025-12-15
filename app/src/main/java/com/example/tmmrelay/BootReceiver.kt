@@ -1,4 +1,4 @@
-﻿package com.example.tmmrelay
+package com.example.tmmrelay
 
 import android.content.BroadcastReceiver
 import android.content.Context

@@ -1,4 +1,4 @@
-﻿package com.example.tmmrelay
+package com.example.tmmrelay
 
 import android.Manifest
 import android.content.Intent

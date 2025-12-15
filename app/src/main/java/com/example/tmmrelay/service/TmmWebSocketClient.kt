@@ -1,4 +1,4 @@
-﻿package com.example.tmmrelay.service
+package com.example.tmmrelay.service
 
 import android.content.Context
 import com.example.tmmrelay.model.TelemetryPayload
