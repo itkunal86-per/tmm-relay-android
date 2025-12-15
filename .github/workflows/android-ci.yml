@@ -26,9 +26,6 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Verify Gradle wrapper JAR
-        run: ls -l gradle/wrapper && test -f gradle/wrapper/gradle-wrapper.jar
-
       - name: Build (lint + unit tests + APKs)
         run: ./gradlew lint test assembleDebug assembleRelease
 
