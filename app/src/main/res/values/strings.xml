@@ -1,0 +1,6 @@
+﻿<resources>
+    <string name="app_name">TMM Relay</string>
+    <string name="app_desc">Trimble DA2 telemetry relay (foreground service)</string>
+    <string name="start_relay">Start Relay</string>
+    <string name="stop_relay">Stop Relay</string>
+</resources>
