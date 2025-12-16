@@ -37,7 +37,7 @@ jobs:
 
       - name: Build (lint + unit tests + APKs)
         run: |
-          ./gradlew lint test assembleDebug assembleRelease
+          ./gradlew lint test assembleDebug assembleRelease --stacktrace --info
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
