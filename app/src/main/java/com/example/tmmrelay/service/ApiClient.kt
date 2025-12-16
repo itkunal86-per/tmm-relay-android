@@ -1,4 +1,4 @@
-﻿package com.example.tmmrelay.service
+package com.example.tmmrelay.service
 
 import com.example.tmmrelay.model.TelemetryPayload
 import okhttp3.Call

@@ -1,4 +1,4 @@
-﻿package com.example.tmmrelay.model
+package com.example.tmmrelay.model
 
 data class TelemetryPayload(
     val tenantId: String,

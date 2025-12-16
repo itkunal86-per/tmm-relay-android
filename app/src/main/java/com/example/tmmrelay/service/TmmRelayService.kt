@@ -1,4 +1,4 @@
-﻿package com.example.tmmrelay.service
+package com.example.tmmrelay.service
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -49,7 +49,7 @@ class TmmRelayService : Service() {
         )
 
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, notification("Connectingâ€¦"))
+        startForeground(NOTIFICATION_ID, notification("Connecting..."))
         wsClient.connect(tenantId, deviceId)
         handler.postDelayed(offlineCheck, TimeUnit.MINUTES.toMillis(1))
     }
