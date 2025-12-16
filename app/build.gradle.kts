@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.tmmrelay"
+    namespace = "com.hirenq.tmmrelay"
     compileSdk = 34
 
     defaultConfig {
