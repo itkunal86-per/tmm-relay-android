@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.hirenq.tmmrelay"
+    namespace = "com.example.tmmrelay"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.hirenq.tmmrelay"
+        applicationId = "com.example.tmmrelay"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
