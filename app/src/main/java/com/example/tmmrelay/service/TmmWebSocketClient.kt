@@ -1,8 +1,8 @@
-package com.example.tmmrelay.service
+package com.hirenq.tmmrelay.service
 
 import android.content.Context
-import com.example.tmmrelay.model.TelemetryPayload
-import com.example.tmmrelay.util.DeviceInfoUtil
+import com.hirenq.tmmrelay.model.TelemetryPayload
+import com.hirenq.tmmrelay.util.DeviceInfoUtil
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response

@@ -1,6 +1,6 @@
-package com.example.tmmrelay.service
+package com.hirenq.tmmrelay.service
 
-import com.example.tmmrelay.model.TelemetryPayload
+import com.hirenq.tmmrelay.model.TelemetryPayload
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType

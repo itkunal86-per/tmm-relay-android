@@ -1,9 +1,9 @@
-package com.example.tmmrelay
+package com.hirenq.tmmrelay
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.example.tmmrelay.service.TmmRelayService
+import com.hirenq.tmmrelay.service.TmmRelayService
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

@@ -1,4 +1,4 @@
-package com.example.tmmrelay.service
+package com.hirenq.tmmrelay.service
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -11,9 +11,9 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
-import com.example.tmmrelay.R
-import com.example.tmmrelay.model.TelemetryPayload
-import com.example.tmmrelay.util.DeviceInfoUtil
+import com.hirenq.tmmrelay.R
+import com.hirenq.tmmrelay.model.TelemetryPayload
+import com.hirenq.tmmrelay.util.DeviceInfoUtil
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 

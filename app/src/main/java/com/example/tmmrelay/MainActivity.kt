@@ -1,4 +1,4 @@
-package com.example.tmmrelay
+package com.hirenq.tmmrelay
 
 import android.Manifest
 import android.content.Intent
@@ -8,8 +8,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import com.example.tmmrelay.databinding.ActivityMainBinding
-import com.example.tmmrelay.service.TmmRelayService
+import com.hirenq.tmmrelay.databinding.ActivityMainBinding
+import com.hirenq.tmmrelay.service.TmmRelayService
 
 class MainActivity : ComponentActivity() {
 
