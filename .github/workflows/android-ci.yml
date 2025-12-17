@@ -41,7 +41,7 @@ jobs:
       # 🔐 Decode keystore securely from GitHub Secrets
       - name: Decode release keystore
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > app/release.keystore
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > app/tmmrelay-release2.keystore
 
       # 🏗️ Build + Lint + Tests + Signed Release APK
       - name: Build (lint + tests + APKs)
