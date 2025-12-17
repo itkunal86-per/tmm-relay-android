@@ -16,12 +16,21 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-
+signingConfigs {
+        create("release") {
+            storeFile = file("release.keystore")
+            storePassword = "your_store_password"
+            keyAlias = "tmmrelay"
+            keyPassword = "your_key_password"
+        }
+    }
     buildTypes {
         debug {
             isMinifyEnabled = false
         }
+
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
