@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
@@ -19,9 +19,9 @@ android {
 signingConfigs {
         create("release") {
             storeFile = file("release.keystore")
-            storePassword = "your_store_password"
-            keyAlias = "tmmrelay"
-            keyPassword = "your_key_password"
+            storePassword = "ANDROID_KEYSTORE_PASSWORD"
+            keyAlias = "ANDROID_KEY_ALIAS"
+            keyPassword = "ANDROID_KEY_PASSWORD"
         }
     }
     buildTypes {
