@@ -34,7 +34,10 @@ jobs:
           org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
           EOF
           cat gradle.properties
-
+          
+      - name: Clean Gradle Cache
+        run: ./gradlew clean
+        
       - name: Build (lint + unit tests + APKs)
         run: |
           ./gradlew lint test assembleDebug assembleRelease --scan 
