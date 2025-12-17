@@ -19,9 +19,9 @@ android {
 signingConfigs {
         create("release") {
             storeFile = file("release.keystore")
-            storePassword = "ANDROID_KEYSTORE_PASSWORD"
-            keyAlias = "ANDROID_KEY_ALIAS"
-            keyPassword = "ANDROID_KEY_PASSWORD"
+            storePassword = "!q2w3e4R"
+            keyAlias = "tmmrelay"
+            keyPassword = "!q2w3e4R"
         }
     }
     buildTypes {
