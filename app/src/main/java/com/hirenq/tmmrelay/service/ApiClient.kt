@@ -13,7 +13,7 @@ import java.io.IOException
 
 object ApiClient {
 
-    private const val API_URL = "https://altgeo-api.hirenq.com/api/device/push"
+    private const val API_URL = "https://altgeo-api.hirenq.com/api/Device/pushdadata"
     private val client: OkHttpClient = OkHttpClient.Builder().build()
 
     fun send(payload: TelemetryPayload, apiKey: String? = null) {
