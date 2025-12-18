@@ -1,5 +1,7 @@
 package com.hirenq.tmmrelay
-
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.graphics.Color
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -56,4 +58,27 @@ class MainActivity : ComponentActivity() {
             startService(intent)
         }
     }
+    private val telemetryReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+        val success = intent?.getBooleanExtra("success", false) ?: false
+        val message = intent?.getStringExtra("message") ?: ""
+
+        binding.tvStatus.text = message
+        binding.tvStatus.setTextColor(
+            if (success) Color.parseColor("#2E7D32") else Color.RED
+        )
+    }
+
+    override fun onStart() {
+    super.onStart()
+    registerReceiver(telemetryReceiver, IntentFilter("TELEMETRY_STATUS"))
+   }
+
+    override fun onStop() {
+        unregisterReceiver(telemetryReceiver)
+        super.onStop()
+    }
+
+}
+
 }

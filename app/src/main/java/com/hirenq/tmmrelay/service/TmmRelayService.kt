@@ -43,7 +43,9 @@ class TmmRelayService : Service() {
             context = this,
             onMessage = { payload ->
                 lastMessageAt = Instant.now()
-                ApiClient.send(payload.copy(deviceId = deviceId), apiKey)
+                ApiClient.send(payload.copy(deviceId = deviceId), apiKey) { success, msg ->
+                    sendStatusToUi(success, msg)
+                }
             },
             onError = { /* consider logging/retry strategy */ }
         )
@@ -98,7 +100,15 @@ class TmmRelayService : Service() {
             timestamp = Instant.now().toString(),
             health = "OFFLINE"
         )
-        ApiClient.send(payload, apiKey)
+        ApiClient.send(payload, apiKey) { success, msg ->
+            sendStatusToUi(success, msg)
+        }
+    }
+    private fun sendStatusToUi(success: Boolean, message: String) {
+        val intent = Intent("TELEMETRY_STATUS")
+        intent.putExtra("success", success)
+        intent.putExtra("message", message)
+        sendBroadcast(intent)
     }
 
     companion object {

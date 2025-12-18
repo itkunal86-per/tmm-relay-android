@@ -16,34 +16,41 @@ object ApiClient {
     private const val API_URL = "https://altgeo-api.hirenq.com/api/Device/pushdata"
     private val client: OkHttpClient = OkHttpClient.Builder().build()
 
-    fun send(payload: TelemetryPayload, apiKey: String? = null) {
-        val json = JSONObject().apply {
-            put("deviceId", payload.deviceId)
-            put("latitude", payload.latitude)
-            put("longitude", payload.longitude)
-            put("battery", payload.battery)
-            put("fixType", payload.fixType)
-            put("timestamp", payload.timestamp)
-            put("health", payload.health)
+  fun send(
+    payload: TelemetryPayload,
+    apiKey: String? = null,
+    callback: (Boolean, String) -> Unit
+   ) {
+    val json = JSONObject().apply {
+        put("deviceId", payload.deviceId)
+        put("latitude", payload.latitude)
+        put("longitude", payload.longitude)
+        put("battery", payload.battery)
+        put("fixType", payload.fixType)
+        put("timestamp", payload.timestamp)
+        put("health", payload.health)
+    }
+
+    val body = json.toString()
+        .toRequestBody("application/json".toMediaType())
+
+    val request = Request.Builder()
+        .url(API_URL)
+        .post(body)
+        .apply { apiKey?.let { addHeader("Authorization", "Bearer $it") } }
+        .build()
+
+    client.newCall(request).enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            callback(false, "API failed: ${e.message}")
         }
 
-        val body = json.toString().toRequestBody("application/json".toMediaType())
+        override fun onResponse(call: Call, response: Response) {
+            callback(response.isSuccessful, "API hit: ${response.code}")
+            response.close()
+        }
+    })
+}
 
-        val request = Request.Builder()
-            .url(API_URL)
-            .addHeader("tenantId", payload.tenantId)
-            .apply { apiKey?.let { addHeader("Authorization", "Bearer $it") } }
-            .post(body)
-            .build()
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                // TODO: add logging or retry policy as needed
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.close()
-            }
-        })
-    }
 }
