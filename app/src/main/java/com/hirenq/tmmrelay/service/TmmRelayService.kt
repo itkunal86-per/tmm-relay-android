@@ -24,6 +24,15 @@ class TmmRelayService : Service() {
     private val apiKey: String? = null // replace with secure injection
     private var lastMessageAt: Instant = Instant.now()
     private val handler = Handler(Looper.getMainLooper())
+    private var isRelayStarted = false
+    private var lastPostTimestamp: String? = null
+    private var lastPostPayload: String? = null
+    private var lastKnownLatitude: Double = 0.0
+    private var lastKnownLongitude: Double = 0.0
+    private var lastKnownFixType: String = "UNKNOWN"
+    private val notificationManager: NotificationManager by lazy {
+        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    }
 
     private val offlineCheck = object : Runnable {
         override fun run() {
@@ -35,6 +44,16 @@ class TmmRelayService : Service() {
         }
     }
 
+    // Periodic POST call every 5 minutes
+    private val periodicPostCheck = object : Runnable {
+        override fun run() {
+            if (isRelayStarted) {
+                sendPeriodicPost()
+            }
+            handler.postDelayed(this, TimeUnit.MINUTES.toMillis(5))
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         val deviceId = DeviceInfoUtil.deviceId(this)
@@ -43,15 +62,28 @@ class TmmRelayService : Service() {
             context = this,
             onMessage = { payload ->
                 lastMessageAt = Instant.now()
-                ApiClient.send(payload.copy(deviceId = deviceId), apiKey)
+                // Store last known location for periodic POSTs
+                lastKnownLatitude = payload.latitude
+                lastKnownLongitude = payload.longitude
+                lastKnownFixType = payload.fixType
+                ApiClient.send(
+                    payload.copy(deviceId = deviceId), 
+                    apiKey,
+                    onPostSent = { timestamp, payloadInfo ->
+                        updateNotificationWithPost(timestamp, payloadInfo)
+                    }
+                )
             },
             onError = { /* consider logging/retry strategy */ }
         )
 
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, notification("Connecting..."))
+        isRelayStarted = true
+        startForeground(NOTIFICATION_ID, buildNotification("Started"))
         wsClient.connect(tenantId, deviceId)
         handler.postDelayed(offlineCheck, TimeUnit.MINUTES.toMillis(1))
+        // Start periodic POST calls every 5 minutes
+        handler.postDelayed(periodicPostCheck, TimeUnit.MINUTES.toMillis(5))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -59,20 +91,46 @@ class TmmRelayService : Service() {
     }
 
     override fun onDestroy() {
+        isRelayStarted = false
         wsClient.close()
         handler.removeCallbacksAndMessages(null)
+        // Update notification to show stopped status
+        updateNotification("Stopped")
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun notification(text: String): Notification =
-        NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("GNSS Tracking Active")
-            .setContentText(text)
+    private fun buildNotification(status: String): Notification {
+        val statusText = "Sync Relay: $status"
+        val lastPostText = if (lastPostTimestamp != null && lastPostPayload != null) {
+            "\nLast POST: $lastPostTimestamp - $lastPostPayload"
+        } else {
+            "\nNo POST calls yet"
+        }
+        
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("TMM Relay Service")
+            .setContentText(statusText + lastPostText)
+            .setStyle(NotificationCompat.BigTextStyle()
+                .bigText(statusText + lastPostText))
             .setSmallIcon(R.drawable.ic_tracker)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
+    }
+
+    private fun updateNotification(status: String) {
+        val notification = buildNotification(status)
+        notificationManager.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun updateNotificationWithPost(timestamp: String, payloadInfo: String) {
+        lastPostTimestamp = timestamp
+        lastPostPayload = payloadInfo
+        val status = if (isRelayStarted) "Started" else "Stopped"
+        updateNotification(status)
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -98,7 +156,33 @@ class TmmRelayService : Service() {
             timestamp = Instant.now().toString(),
             health = "OFFLINE"
         )
-        ApiClient.send(payload, apiKey)
+        ApiClient.send(
+            payload, 
+            apiKey,
+            onPostSent = { timestamp, payloadInfo ->
+                updateNotificationWithPost(timestamp, payloadInfo)
+            }
+        )
+    }
+
+    private fun sendPeriodicPost() {
+        val payload = TelemetryPayload(
+            tenantId = tenantId,
+            deviceId = DeviceInfoUtil.deviceId(this),
+            latitude = lastKnownLatitude,
+            longitude = lastKnownLongitude,
+            battery = DeviceInfoUtil.batteryLevel(this),
+            fixType = if (lastKnownFixType != "UNKNOWN") lastKnownFixType else "PERIODIC",
+            timestamp = Instant.now().toString(),
+            health = "OK"
+        )
+        ApiClient.send(
+            payload,
+            apiKey,
+            onPostSent = { timestamp, payloadInfo ->
+                updateNotificationWithPost(timestamp, payloadInfo)
+            }
+        )
     }
 
     companion object {

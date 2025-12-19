@@ -3,11 +3,11 @@
 Minimal scaffold for relaying Trimble Mobile Manager (local WebSocket `ws://127.0.0.1:4949/positionStream`) telemetry to your backend as JSON every time a message arrives, while running as a foreground service and auto-starting on boot.
 
 ## Structure
-- `app/src/main/java/com/example/tmmrelay/model/TelemetryPayload.kt` â€“ data model including health flag.
-- `service/` â€“ WebSocket client, API client, and foreground relay service.
-- `BootReceiver` â€“ launches service after reboot.
-- `MainActivity` â€“ simple UI to start/stop relay and request runtime permissions.
-- `util/DeviceInfoUtil` â€“ device id, battery, and health helpers.
+- `app/src/main/java/com/hirenq/tmmrelay/model/TelemetryPayload.kt` â€" data model including health flag.
+- `service/` â€" WebSocket client, API client, and foreground relay service.
+- `BootReceiver` â€" launches service after reboot.
+- `MainActivity` â€" simple UI to start/stop relay and request runtime permissions.
+- `util/DeviceInfoUtil` â€" device id, battery, and health helpers.
 
 ## Build
 1) Open in Android Studio (Giraffe+).  
