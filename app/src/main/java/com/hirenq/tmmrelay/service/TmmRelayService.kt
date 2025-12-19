@@ -49,7 +49,12 @@ class TmmRelayService : Service() {
     private val periodicPostCheck = object : Runnable {
         override fun run() {
             if (isRelayStarted) {
-                sendPeriodicPost()
+                // Only send periodic POST if we have valid coordinates (not 0,0)
+                if (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0) {
+                    sendPeriodicPost()
+                } else {
+                    android.util.Log.d("TmmRelayService", "Skipping periodic POST - no valid coordinates yet")
+                }
             }
             handler.postDelayed(this, TimeUnit.MINUTES.toMillis(5))
         }
@@ -63,10 +68,13 @@ class TmmRelayService : Service() {
             context = this,
             onMessage = { payload ->
                 lastMessageAt = Instant.now()
-                // Store last known location for periodic POSTs
-                lastKnownLatitude = payload.latitude
-                lastKnownLongitude = payload.longitude
-                lastKnownFixType = payload.fixType
+                // Store last known location for periodic POSTs (only if valid)
+                if (payload.latitude != 0.0 || payload.longitude != 0.0) {
+                    lastKnownLatitude = payload.latitude
+                    lastKnownLongitude = payload.longitude
+                    lastKnownFixType = payload.fixType
+                    android.util.Log.d("TmmRelayService", "Updated last known location: Lat=${payload.latitude}, Lng=${payload.longitude}")
+                }
                 ApiClient.send(
                     payload.copy(deviceId = deviceId), 
                     apiKey,
@@ -75,7 +83,9 @@ class TmmRelayService : Service() {
                     }
                 )
             },
-            onError = { /* consider logging/retry strategy */ }
+            onError = { error ->
+                android.util.Log.e("TmmRelayService", "WebSocket error", error)
+            }
         )
 
         createNotificationChannel()
@@ -136,6 +146,7 @@ class TmmRelayService : Service() {
         // Broadcast the POST update
         val postInfo = "$timestamp - $payloadInfo"
         broadcastStatusUpdate(status, postInfo)
+
     }
 
     private fun broadcastStatusUpdate(status: String, postInfo: String?) {
@@ -151,6 +162,7 @@ class TmmRelayService : Service() {
             }
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+
     }
 
     private fun createNotificationChannel() {
@@ -204,6 +216,21 @@ class TmmRelayService : Service() {
                 updateNotificationWithPost(timestamp, payloadInfo)
             }
         )
+    }
+
+    private fun broadcastStatusUpdate(status: String, postInfo: String?) {
+        val intent = Intent(ACTION_STATUS_UPDATE).apply {
+            putExtra(EXTRA_STATUS, status)
+            if (postInfo != null && postInfo.contains(" - ")) {
+                val parts = postInfo.split(" - ", limit = 2)
+                putExtra(EXTRA_POST_TIMESTAMP, parts[0])
+                putExtra(EXTRA_POST_PAYLOAD, parts.getOrElse(1) { "" })
+            } else {
+                putExtra(EXTRA_POST_TIMESTAMP, "")
+                putExtra(EXTRA_POST_PAYLOAD, "")
+            }
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
     companion object {
