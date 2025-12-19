@@ -64,6 +64,9 @@ dependencies {
 
     // Lifecycle (for foreground service safety)
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
+    
+    // LocalBroadcastManager (for service-activity communication)
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
 
     // Networking (for API relay)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

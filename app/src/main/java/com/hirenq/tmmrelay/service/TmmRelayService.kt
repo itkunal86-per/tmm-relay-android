@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.hirenq.tmmrelay.R
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
@@ -48,7 +49,12 @@ class TmmRelayService : Service() {
     private val periodicPostCheck = object : Runnable {
         override fun run() {
             if (isRelayStarted) {
-                sendPeriodicPost()
+                // Only send periodic POST if we have valid coordinates (not 0,0)
+                if (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0) {
+                    sendPeriodicPost()
+                } else {
+                    android.util.Log.d("TmmRelayService", "Skipping periodic POST - no valid coordinates yet")
+                }
             }
             handler.postDelayed(this, TimeUnit.MINUTES.toMillis(5))
         }
@@ -62,10 +68,13 @@ class TmmRelayService : Service() {
             context = this,
             onMessage = { payload ->
                 lastMessageAt = Instant.now()
-                // Store last known location for periodic POSTs
-                lastKnownLatitude = payload.latitude
-                lastKnownLongitude = payload.longitude
-                lastKnownFixType = payload.fixType
+                // Store last known location for periodic POSTs (only if valid)
+                if (payload.latitude != 0.0 || payload.longitude != 0.0) {
+                    lastKnownLatitude = payload.latitude
+                    lastKnownLongitude = payload.longitude
+                    lastKnownFixType = payload.fixType
+                    android.util.Log.d("TmmRelayService", "Updated last known location: Lat=${payload.latitude}, Lng=${payload.longitude}")
+                }
                 ApiClient.send(
                     payload.copy(deviceId = deviceId), 
                     apiKey,
@@ -74,12 +83,15 @@ class TmmRelayService : Service() {
                     }
                 )
             },
-            onError = { /* consider logging/retry strategy */ }
+            onError = { error ->
+                android.util.Log.e("TmmRelayService", "WebSocket error", error)
+            }
         )
 
         createNotificationChannel()
         isRelayStarted = true
         startForeground(NOTIFICATION_ID, buildNotification("Started"))
+        broadcastStatusUpdate("Started", null)
         wsClient.connect(tenantId, deviceId)
         handler.postDelayed(offlineCheck, TimeUnit.MINUTES.toMillis(1))
         // Start periodic POST calls every 5 minutes
@@ -96,6 +108,7 @@ class TmmRelayService : Service() {
         handler.removeCallbacksAndMessages(null)
         // Update notification to show stopped status
         updateNotification("Stopped")
+        broadcastStatusUpdate("Stopped", null)
         super.onDestroy()
     }
 
@@ -130,6 +143,9 @@ class TmmRelayService : Service() {
         lastPostPayload = payloadInfo
         val status = if (isRelayStarted) "Started" else "Stopped"
         updateNotification(status)
+        // Broadcast the POST update
+        val postInfo = "$timestamp - $payloadInfo"
+        broadcastStatusUpdate(status, postInfo)
     }
 
     private fun createNotificationChannel() {
@@ -185,8 +201,29 @@ class TmmRelayService : Service() {
         )
     }
 
+    private fun broadcastStatusUpdate(status: String, postInfo: String?) {
+        val intent = Intent(ACTION_STATUS_UPDATE).apply {
+            putExtra(EXTRA_STATUS, status)
+            if (postInfo != null && postInfo.contains(" - ")) {
+                val parts = postInfo.split(" - ", limit = 2)
+                putExtra(EXTRA_POST_TIMESTAMP, parts[0])
+                putExtra(EXTRA_POST_PAYLOAD, parts.getOrElse(1) { "" })
+            } else {
+                putExtra(EXTRA_POST_TIMESTAMP, "")
+                putExtra(EXTRA_POST_PAYLOAD, "")
+            }
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
     companion object {
         private const val CHANNEL_ID = "tmm_channel"
         private const val NOTIFICATION_ID = 1
+        
+        // Broadcast actions
+        const val ACTION_STATUS_UPDATE = "com.hirenq.tmmrelay.STATUS_UPDATE"
+        const val EXTRA_STATUS = "status"
+        const val EXTRA_POST_TIMESTAMP = "post_timestamp"
+        const val EXTRA_POST_PAYLOAD = "post_payload"
     }
 }
