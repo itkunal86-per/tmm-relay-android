@@ -1,13 +1,17 @@
 package com.hirenq.tmmrelay
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.hirenq.tmmrelay.databinding.ActivityMainBinding
 import com.hirenq.tmmrelay.service.TmmRelayService
 
@@ -18,10 +22,25 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
+    private val statusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == TmmRelayService.ACTION_STATUS_UPDATE) {
+                val status = intent.getStringExtra(TmmRelayService.EXTRA_STATUS) ?: "Stopped"
+                val postTimestamp = intent.getStringExtra(TmmRelayService.EXTRA_POST_TIMESTAMP) ?: ""
+                val postPayload = intent.getStringExtra(TmmRelayService.EXTRA_POST_PAYLOAD) ?: ""
+                
+                updateStatusUI(status, postTimestamp, postPayload)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Initialize UI with default values
+        updateStatusUI("Stopped", "", "")
 
         binding.btnStart.setOnClickListener {
             ensurePermissions()
@@ -30,7 +49,36 @@ class MainActivity : ComponentActivity() {
 
         binding.btnStop.setOnClickListener {
             stopService(Intent(this, TmmRelayService::class.java))
+            updateStatusUI("Stopped", "", "")
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Register broadcast receiver
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            statusReceiver,
+            IntentFilter(TmmRelayService.ACTION_STATUS_UPDATE)
+        )
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Unregister broadcast receiver
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(statusReceiver)
+    }
+
+    private fun updateStatusUI(status: String, postTimestamp: String, postPayload: String) {
+        binding.tvStatus.text = status
+        
+        val postInfo = if (postTimestamp.isNotEmpty() && postPayload.isNotEmpty()) {
+            "$postTimestamp - $postPayload"
+        } else if (postTimestamp.isNotEmpty()) {
+            postTimestamp
+        } else {
+            "No POST calls yet"
+        }
+        binding.tvPostPayload.text = postInfo
     }
 
     private fun ensurePermissions() {
