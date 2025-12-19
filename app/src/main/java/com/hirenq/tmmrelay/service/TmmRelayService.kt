@@ -149,21 +149,7 @@ class TmmRelayService : Service() {
 
     }
 
-    private fun broadcastStatusUpdate(status: String, postInfo: String?) {
-        val intent = Intent(ACTION_STATUS_UPDATE).apply {
-            putExtra(EXTRA_STATUS, status)
-            if (postInfo != null && postInfo.contains(" - ")) {
-                val parts = postInfo.split(" - ", limit = 2)
-                putExtra(EXTRA_POST_TIMESTAMP, parts[0])
-                putExtra(EXTRA_POST_PAYLOAD, parts.getOrElse(1) { "" })
-            } else {
-                putExtra(EXTRA_POST_TIMESTAMP, "")
-                putExtra(EXTRA_POST_PAYLOAD, "")
-            }
-        }
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-
-    }
+   
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -217,8 +203,7 @@ class TmmRelayService : Service() {
             }
         )
     }
-
-    private fun broadcastStatusUpdate(status: String, postInfo: String?) {
+ private fun broadcastStatusUpdate(status: String, postInfo: String?) {
         val intent = Intent(ACTION_STATUS_UPDATE).apply {
             putExtra(EXTRA_STATUS, status)
             if (postInfo != null && postInfo.contains(" - ")) {
@@ -231,7 +216,9 @@ class TmmRelayService : Service() {
             }
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+
     }
+   
 
     companion object {
         private const val CHANNEL_ID = "tmm_channel"
