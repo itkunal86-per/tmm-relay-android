@@ -24,11 +24,13 @@ class MainActivity : ComponentActivity() {
 
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            android.util.Log.d("MainActivity", "Received broadcast: ${intent?.action}")
             if (intent?.action == TmmRelayService.ACTION_STATUS_UPDATE) {
                 val status = intent.getStringExtra(TmmRelayService.EXTRA_STATUS) ?: "Stopped"
                 val postTimestamp = intent.getStringExtra(TmmRelayService.EXTRA_POST_TIMESTAMP) ?: ""
                 val postPayload = intent.getStringExtra(TmmRelayService.EXTRA_POST_PAYLOAD) ?: ""
                 
+                android.util.Log.d("MainActivity", "Updating UI - Status: $status, Timestamp: $postTimestamp, Payload: $postPayload")
                 updateStatusUI(status, postTimestamp, postPayload)
             }
         }
@@ -56,29 +58,47 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // Register broadcast receiver
-        LocalBroadcastManager.getInstance(this).registerReceiver(
-            statusReceiver,
-            IntentFilter(TmmRelayService.ACTION_STATUS_UPDATE)
-        )
+        try {
+            LocalBroadcastManager.getInstance(this).registerReceiver(
+                statusReceiver,
+                IntentFilter(TmmRelayService.ACTION_STATUS_UPDATE)
+            )
+            android.util.Log.d("MainActivity", "Broadcast receiver registered")
+            
+            // Request current status from service if it's running
+            val serviceIntent = Intent(this, TmmRelayService::class.java)
+            startService(serviceIntent) // This will trigger onStartCommand which broadcasts status
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error registering receiver", e)
+        }
     }
 
     override fun onPause() {
         super.onPause()
         // Unregister broadcast receiver
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(statusReceiver)
+        try {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(statusReceiver)
+            android.util.Log.d("MainActivity", "Broadcast receiver unregistered")
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error unregistering receiver", e)
+        }
     }
 
     private fun updateStatusUI(status: String, postTimestamp: String, postPayload: String) {
-        binding.tvStatus.text = status
-        
-        val postInfo = if (postTimestamp.isNotEmpty() && postPayload.isNotEmpty()) {
-            "$postTimestamp - $postPayload"
-        } else if (postTimestamp.isNotEmpty()) {
-            postTimestamp
-        } else {
-            "No POST calls yet"
+        // Update UI on main thread
+        runOnUiThread {
+            binding.tvStatus.text = status
+            
+            val postInfo = if (postTimestamp.isNotEmpty() && postPayload.isNotEmpty()) {
+                "$postTimestamp - $postPayload"
+            } else if (postTimestamp.isNotEmpty()) {
+                postTimestamp
+            } else {
+                "No POST calls yet"
+            }
+            binding.tvPostPayload.text = postInfo
+            android.util.Log.d("MainActivity", "UI updated - Status: $status, POST: $postInfo")
         }
-        binding.tvPostPayload.text = postInfo
     }
 
     private fun ensurePermissions() {

@@ -99,6 +99,16 @@ class TmmRelayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // If service is already started, broadcast current status
+        if (isRelayStarted) {
+            val status = "Started"
+            val postInfo = if (lastPostTimestamp != null && lastPostPayload != null) {
+                "$lastPostTimestamp - $lastPostPayload"
+            } else {
+                null
+            }
+            broadcastStatusUpdate(status, postInfo)
+        }
         return START_STICKY
     }
 
@@ -203,20 +213,23 @@ class TmmRelayService : Service() {
             }
         )
     }
- private fun broadcastStatusUpdate(status: String, postInfo: String?) {
-        val intent = Intent(ACTION_STATUS_UPDATE).apply {
-            putExtra(EXTRA_STATUS, status)
-            if (postInfo != null && postInfo.contains(" - ")) {
-                val parts = postInfo.split(" - ", limit = 2)
-                putExtra(EXTRA_POST_TIMESTAMP, parts[0])
-                putExtra(EXTRA_POST_PAYLOAD, parts.getOrElse(1) { "" })
-            } else {
-                putExtra(EXTRA_POST_TIMESTAMP, "")
-                putExtra(EXTRA_POST_PAYLOAD, "")
+    private fun broadcastStatusUpdate(status: String, postInfo: String?) {
+        // Ensure broadcast is sent on main thread
+        handler.post {
+            val intent = Intent(ACTION_STATUS_UPDATE).apply {
+                putExtra(EXTRA_STATUS, status)
+                if (postInfo != null && postInfo.contains(" - ")) {
+                    val parts = postInfo.split(" - ", limit = 2)
+                    putExtra(EXTRA_POST_TIMESTAMP, parts[0])
+                    putExtra(EXTRA_POST_PAYLOAD, parts.getOrElse(1) { "" })
+                } else {
+                    putExtra(EXTRA_POST_TIMESTAMP, "")
+                    putExtra(EXTRA_POST_PAYLOAD, "")
+                }
             }
+            android.util.Log.d("TmmRelayService", "Broadcasting status: $status, postInfo: $postInfo")
+            LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
         }
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-
     }
    
 
