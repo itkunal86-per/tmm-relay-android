@@ -4,28 +4,16 @@ import android.content.Context
 import android.util.Log
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
+import okhttp3.*
 import org.json.JSONObject
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 /**
  * Trimble Mobile Manager (TMM) WebSocket Client
- * 
- * Connects to TMM's local WebSocket server at ws://127.0.0.1:9635
- * to receive live GNSS receiver coordinates from DA2/Catalyst receivers.
- * 
- * This is the ONLY way to get live GNSS receiver coordinates from a DA2 on Android
- * without Trimble Cloud / TPPAS.
- * 
- * Requirements:
- * - Trimble Mobile Manager must be running
- * - Receiver (DA2/Catalyst) must be connected via Bluetooth
- * - No internet required for WebSocket connection
+ *
+ * Connects to local TMM WebSocket server (ws://127.0.0.1:9635)
+ * Receives GNSS coordinates from DA2 / Catalyst receivers.
  */
 class TmmWebSocketClient(
     private val context: Context,
@@ -34,124 +22,101 @@ class TmmWebSocketClient(
 ) {
 
     private val TAG = "TmmWebSocketClient"
+
     private val client = OkHttpClient.Builder()
         .pingInterval(15, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
-    // TMM local WebSocket endpoint (undocumented but widely used)
     private val tmmUrl = "ws://127.0.0.1:9635"
     private var webSocket: WebSocket? = null
 
     fun connect(tenantId: String, deviceId: String) {
         Log.d(TAG, "Connecting to TMM WebSocket: $tmmUrl")
+
         val request = Request.Builder()
             .url(tmmUrl)
             .build()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
 
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.d(TAG, "Connected to TMM WebSocket")
-                
-                // Subscribe to location updates (some TMM versions require this)
+            override fun onOpen(ws: WebSocket, response: Response) {
+                Log.i(TAG, "Connected to Trimble Mobile Manager WebSocket")
+
+                // NOTE:
+                // Some TMM versions auto-push location.
+                // Some ignore subscription completely.
+                // Keeping this OPTIONAL and non-blocking.
                 try {
-                    val subscribeMessage = JSONObject().apply {
+                    val subscribe = JSONObject().apply {
                         put("type", "subscribe")
                         put("topic", "location")
                     }
-                    webSocket.send(subscribeMessage.toString())
-                    Log.d(TAG, "Sent subscription request for location topic")
+                    ws.send(subscribe.toString())
+                    Log.d(TAG, "Sent optional subscribe message")
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to send subscription message (may auto-push)", e)
+                    Log.w(TAG, "Subscribe message failed (safe to ignore)", e)
                 }
-                
-                super.onOpen(webSocket, response)
             }
 
             override fun onMessage(ws: WebSocket, text: String) {
                 try {
-                    Log.d(TAG, "TMM Message: $text")
+                    // 🔴 CRITICAL: Always log raw message
+                    Log.e("TMM_RAW", "RAW => $text")
+
                     val json = JSONObject(text)
 
-                    // Check if this is a location message
-                    val messageType = json.optString("type", "")
-                    if (messageType != "location" && messageType.isNotEmpty()) {
-                        Log.d(TAG, "Ignoring non-location message type: $messageType")
+                    // ✅ DO NOT depend on "type"
+                    val hasLat = json.has("latitude")
+                    val hasLng = json.has("longitude")
+
+                    if (!hasLat || !hasLng) {
+                        Log.d(TAG, "No latitude/longitude found in message, ignoring")
                         return
                     }
 
-                    // Log full JSON to inspect available fields (including user info)
-                    Log.d(TAG, "Full TMM JSON keys: ${json.keys().asSequence().toList()}")
-                    
-                    // Parse TMM location message format
-                    // Sample: { "type": "location", "latitude": 26.14331245, "longitude": 91.78923112, 
-                    //          "height": 54.23, "fixType": "RTK_FIXED", "horizontalAccuracy": 0.012, ... }
                     val latitude = json.optDouble("latitude", 0.0)
                     val longitude = json.optDouble("longitude", 0.0)
                     val height = json.optDouble("height", 0.0)
-                    val fixType = json.optString("fixType", "UNKNOWN")
+                    val fixType = json.optString("fixType", "NO_FIX")
                     val horizontalAccuracy = json.optDouble("horizontalAccuracy", -1.0)
                     val verticalAccuracy = json.optDouble("verticalAccuracy", -1.0)
                     val satellites = json.optInt("satellites", -1)
-                    val timestamp = json.optString("timestamp", "")
-                    
-                    // Extract logged-in user details from TMM (if available)
-                    // Common user field names that TMM might use
-                    val userId = json.optString("userId", "")
-                        .takeIf { it.isNotEmpty() } 
-                        ?: json.optString("user_id", "")
-                        .takeIf { it.isNotEmpty() }
-                        ?: json.optString("username", "")
-                        .takeIf { it.isNotEmpty() }
-                        ?: ""
-                    
-                    val userName = json.optString("userName", "")
-                        .takeIf { it.isNotEmpty() }
-                        ?: json.optString("user_name", "")
-                        .takeIf { it.isNotEmpty() }
-                        ?: json.optString("name", "")
-                        .takeIf { it.isNotEmpty() }
-                        ?: ""
-                    
-                    val userEmail = json.optString("userEmail", "")
-                        .takeIf { it.isNotEmpty() }
-                        ?: json.optString("user_email", "")
-                        .takeIf { it.isNotEmpty() }
-                        ?: json.optString("email", "")
-                        .takeIf { it.isNotEmpty() }
-                        ?: ""
-                    
-                    // Log user details if found
-                    if (userId.isNotEmpty() || userName.isNotEmpty() || userEmail.isNotEmpty()) {
-                        Log.d(TAG, "TMM User Details - UserId: $userId, UserName: $userName, Email: $userEmail")
-                    } else {
-                        Log.d(TAG, "No user details found in TMM message")
-                    }
+                    val timestampStr = json.optString("timestamp", "")
 
-                    // Validate coordinates (0,0 is invalid)
-                    if (latitude == 0.0 && longitude == 0.0) {
-                        Log.w(TAG, "Received invalid coordinates (0,0), skipping")
-                        return
-                    }
+                    Log.d(
+                        TAG,
+                        "Parsed GNSS => Lat:$latitude Lng:$longitude Fix:$fixType Acc:$horizontalAccuracy Sat:$satellites"
+                    )
 
-                    Log.d(TAG, "Parsed location - Lat: $latitude, Lng: $longitude, " +
-                            "Height: $height, FixType: $fixType, Accuracy: $horizontalAccuracy, " +
-                            "Satellites: $satellites")
-
-                    // Get battery level from device (TMM may not provide this)
+                    // Battery is device-based (TMM does not provide it reliably)
                     val battery = DeviceInfoUtil.batteryLevel(context)
 
-                    // Use timestamp from TMM if available, otherwise use current time
-                    val payloadTimestamp = if (timestamp.isNotEmpty()) {
-                        try {
-                            Instant.parse(timestamp).toString()
-                        } catch (e: Exception) {
+                    val payloadTimestamp = try {
+                        if (timestampStr.isNotEmpty()) {
+                            Instant.parse(timestampStr).toString()
+                        } else {
                             Instant.now().toString()
                         }
-                    } else {
+                    } catch (e: Exception) {
                         Instant.now().toString()
                     }
+
+                    // Optional user fields (may or may not exist)
+                    val userId =
+                        json.optString("userId")
+                            .ifEmpty { json.optString("username") }
+                            .ifEmpty { null }
+
+                    val userName =
+                        json.optString("userName")
+                            .ifEmpty { json.optString("name") }
+                            .ifEmpty { null }
+
+                    val userEmail =
+                        json.optString("userEmail")
+                            .ifEmpty { json.optString("email") }
+                            .ifEmpty { null }
 
                     val payload = TelemetryPayload(
                         tenantId = tenantId,
@@ -165,41 +130,41 @@ class TmmWebSocketClient(
                         verticalAccuracy = verticalAccuracy,
                         satellites = satellites,
                         health = DeviceInfoUtil.health(battery, fixType, null),
-                        userId = userId.takeIf { it.isNotEmpty() },
-                        userName = userName.takeIf { it.isNotEmpty() },
-                        userEmail = userEmail.takeIf { it.isNotEmpty() }
+                        userId = userId,
+                        userName = userName,
+                        userEmail = userEmail
                     )
 
                     onMessage(payload)
+
                 } catch (ex: Exception) {
-                    Log.e(TAG, "Error parsing WebSocket message", ex)
+                    Log.e(TAG, "Failed to parse TMM message", ex)
                     onError(ex)
                 }
             }
 
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket error: ${t.message}")
-                if (response != null) {
-                    Log.e(TAG, "Response: ${response.code} - ${response.message}")
+            override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+                Log.e(TAG, "WebSocket failure: ${t.message}", t)
+                response?.let {
+                    Log.e(TAG, "HTTP ${it.code} - ${it.message}")
                 }
-                Log.e(TAG, "Ensure Trimble Mobile Manager is running and receiver is connected")
+                Log.e(TAG, "Check: TMM running, Bluetooth connected, GNSS fix available")
                 onError(t)
             }
 
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket closing: code=$code, reason=$reason")
-                super.onClosing(webSocket, code, reason)
+            override fun onClosing(ws: WebSocket, code: Int, reason: String) {
+                Log.d(TAG, "WebSocket closing: $code / $reason")
+                ws.close(1000, null)
             }
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket closed: code=$code, reason=$reason")
-                super.onClosed(webSocket, code, reason)
+            override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+                Log.d(TAG, "WebSocket closed: $code / $reason")
             }
         })
     }
 
     fun close() {
-        webSocket?.close(1000, "closing")
+        webSocket?.close(1000, "Service stopped")
         webSocket = null
         Log.d(TAG, "WebSocket connection closed")
     }
