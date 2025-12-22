@@ -8,5 +8,8 @@ data class TelemetryPayload(
     val battery: Int,
     val fixType: String,
     val timestamp: String,
-    val health: String
+    val health: String,
+    val horizontalAccuracy:String,
+    val verticalAccuracy:String,
+    val satellites:String    
 )

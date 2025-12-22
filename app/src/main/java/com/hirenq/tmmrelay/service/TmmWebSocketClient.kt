@@ -125,6 +125,9 @@ class TmmWebSocketClient(
                         battery = battery,
                         fixType = fixType,
                         timestamp = payloadTimestamp,
+                        horizontalAccuracy = horizontalAccuracy,
+                        verticalAccuracy = verticalAccuracy,
+                        satellites = satellites,
                         health = DeviceInfoUtil.health(battery, fixType, null)
                     )
 
