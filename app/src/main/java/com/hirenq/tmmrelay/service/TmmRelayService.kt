@@ -96,7 +96,13 @@ class TmmRelayService : Service() {
         broadcastStatusUpdate("Started", null)
         wsClient.connect(tenantId, deviceId)
         handler.postDelayed(offlineCheck, TimeUnit.MINUTES.toMillis(1))
-        // Start periodic POST calls every 5 minutes
+        
+        // Send immediate POST call when service starts
+        handler.post {
+            sendInitialPost()
+        }
+        
+        // Start periodic POST calls every 5 minutes (first one will be 5 minutes after start)
         handler.postDelayed(periodicPostCheck, TimeUnit.MINUTES.toMillis(5))
     }
 
@@ -199,6 +205,31 @@ class TmmRelayService : Service() {
             apiKey,
             onPostSent = { timestamp, payloadInfo ->
                 android.util.Log.d("TmmRelayService", "Offline POST callback received: $timestamp - $payloadInfo")
+                updateNotificationWithPost(timestamp, payloadInfo)
+            }
+        )
+    }
+
+    private fun sendInitialPost() {
+        android.util.Log.d("TmmRelayService", "Sending initial POST on service start")
+        val payload = TelemetryPayload(
+            tenantId = tenantId,
+            deviceId = DeviceInfoUtil.deviceId(this),
+            latitude = lastKnownLatitude,
+            longitude = lastKnownLongitude,
+            battery = DeviceInfoUtil.batteryLevel(this),
+            fixType = if (lastKnownFixType != "UNKNOWN") lastKnownFixType else "INITIAL",
+            timestamp = Instant.now().toString(),
+            health = if (lastKnownLatitude == 0.0 && lastKnownLongitude == 0.0) "NO_COORDINATES" else "OK",
+            horizontalAccuracy = -1.0,
+            verticalAccuracy = -1.0,
+            satellites = -1
+        )
+        ApiClient.send(
+            payload,
+            apiKey,
+            onPostSent = { timestamp, payloadInfo ->
+                android.util.Log.d("TmmRelayService", "Initial POST callback received: $timestamp - $payloadInfo")
                 updateNotificationWithPost(timestamp, payloadInfo)
             }
         )
