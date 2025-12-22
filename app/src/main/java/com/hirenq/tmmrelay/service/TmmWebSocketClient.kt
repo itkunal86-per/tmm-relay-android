@@ -9,12 +9,6 @@ import org.json.JSONObject
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
-/**
- * Trimble Mobile Manager (TMM) WebSocket Client
- *
- * Connects to local TMM WebSocket server (ws://127.0.0.1:9635)
- * Receives GNSS coordinates from DA2 / Catalyst receivers.
- */
 class TmmWebSocketClient(
     private val context: Context,
     private val onMessage: (TelemetryPayload) -> Unit,
@@ -32,7 +26,6 @@ class TmmWebSocketClient(
     private var webSocket: WebSocket? = null
 
     fun connect(tenantId: String, deviceId: String) {
-        Log.d(TAG, "Connecting to TMM WebSocket: $tmmUrl")
 
         val request = Request.Builder()
             .url(tmmUrl)
@@ -41,30 +34,23 @@ class TmmWebSocketClient(
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
 
             override fun onOpen(ws: WebSocket, response: Response) {
-                Log.i(TAG, "Connected to Trimble Mobile Manager WebSocket")
+                Log.i(TAG, "Connected to TMM WebSocket")
 
-                // NOTE:
-                // Some TMM versions auto-push location.
-                // Some ignore subscription completely.
-                // Keeping this OPTIONAL and non-blocking.
+                // Optional subscribe (safe)
                 try {
-                    val subscribe = JSONObject().apply {
-                        put("type", "subscribe")
-                        put("topic", "location")
-                    }
-                    ws.send(subscribe.toString())
-                    Log.d(TAG, "Sent optional subscribe message")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Subscribe message failed (safe to ignore)", e)
-                }
+                    ws.send(
+                        JSONObject()
+                            .put("type", "subscribe")
+                            .put("topic", "location")
+                            .toString()
+                    )
+                } catch (_: Exception) {}
             }
 
-          override fun onMessage(ws: WebSocket, text: String) {
+            override fun onMessage(ws: WebSocket, text: String) {
                 try {
-                    Log.e("TMM_RAW", "RAW => $text")
+                    Log.d("TMM_RAW", text)
                     val json = JSONObject(text)
-
-                    if (!json.has("latitude") || !json.has("longitude")) return
 
                     val latitude = json.optDouble("latitude", 0.0)
                     val longitude = json.optDouble("longitude", 0.0)
@@ -74,19 +60,15 @@ class TmmWebSocketClient(
                     val verticalAccuracy = json.optDouble("verticalAccuracy", -1.0)
                     val satellites = json.optInt("satellites", 0)
 
-                    // ---- Receiver Battery (optional) ----
                     val receiverBattery =
                         json.optInt("receiverBattery",
-                        json.optInt("batteryLevel",
-                        json.optInt("battery", -1)))
+                        json.optInt("battery", -1))
                             .takeIf { it in 0..100 }
 
-                    // ---- Precision DOPs (optional) ----
                     val pdop = json.optDouble("pdop", -1.0).takeIf { it > 0 }
                     val hdop = json.optDouble("hdop", -1.0).takeIf { it > 0 }
                     val vdop = json.optDouble("vdop", -1.0).takeIf { it > 0 }
 
-                    // ---- Receiver Health (derived) ----
                     val receiverHealth = when {
                         fixType == "NO_FIX" -> "NO_FIX"
                         satellites < 4 -> "POOR"
@@ -95,22 +77,29 @@ class TmmWebSocketClient(
                         else -> "GOOD"
                     }
 
+                    val health = when {
+                        latitude == 0.0 && longitude == 0.0 -> "NO_COORDINATES"
+                        fixType == "NO_FIX" -> "NO_FIX"
+                        else -> "OK"
+                    }
+
                     val payload = TelemetryPayload(
                         tenantId = tenantId,
                         deviceId = deviceId,
                         latitude = latitude,
                         longitude = longitude,
                         battery = DeviceInfoUtil.batteryLevel(context), // phone
-                        receiverBattery = receiverBattery,
                         fixType = fixType,
+                        timestamp = Instant.now().toString(),
+                        health = health,
                         horizontalAccuracy = horizontalAccuracy,
                         verticalAccuracy = verticalAccuracy,
+                        satellites = satellites,
+                        receiverBattery = receiverBattery,
                         pdop = pdop,
                         hdop = hdop,
                         vdop = vdop,
-                        satellites = satellites,
-                        receiverHealth = receiverHealth,
-                        timestamp = Instant.now().toString()
+                        receiverHealth = receiverHealth
                     )
 
                     onMessage(payload)
@@ -121,23 +110,9 @@ class TmmWebSocketClient(
                 }
             }
 
-
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket failure: ${t.message}", t)
-                response?.let {
-                    Log.e(TAG, "HTTP ${it.code} - ${it.message}")
-                }
-                Log.e(TAG, "Check: TMM running, Bluetooth connected, GNSS fix available")
+                Log.e(TAG, "WebSocket failure", t)
                 onError(t)
-            }
-
-            override fun onClosing(ws: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket closing: $code / $reason")
-                ws.close(1000, null)
-            }
-
-            override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket closed: $code / $reason")
             }
         })
     }
@@ -145,6 +120,5 @@ class TmmWebSocketClient(
     fun close() {
         webSocket?.close(1000, "Service stopped")
         webSocket = null
-        Log.d(TAG, "WebSocket connection closed")
     }
 }
