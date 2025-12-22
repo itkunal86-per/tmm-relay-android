@@ -61,6 +61,47 @@ class TmmRelayService : Service() {
         }
     }
 
+    // Status update check every 30 seconds to update dynamic status
+    private val statusUpdateCheck = object : Runnable {
+        override fun run() {
+            if (isRelayStarted) {
+                updateDynamicStatus()
+            }
+            handler.postDelayed(this, TimeUnit.SECONDS.toMillis(30))
+        }
+    }
+
+    private fun getCurrentStatus(): String {
+        if (!isRelayStarted) {
+            return "Stopped"
+        }
+
+        return if (lastSuccessfulPostAt != null) {
+            val duration = java.time.Duration.between(lastSuccessfulPostAt, Instant.now())
+            val minutesSinceLastPost = duration.toMinutes()
+            
+            if (minutesSinceLastPost < 5) {
+                val remainingMinutes = 5 - minutesSinceLastPost
+                "Sleeping for ${remainingMinutes} minute${if (remainingMinutes != 1L) "s" else ""}"
+            } else {
+                "Waiting for websocket of TMM"
+            }
+        } else {
+            "Started"
+        }
+    }
+
+    private fun updateDynamicStatus() {
+        val status = getCurrentStatus()
+        val postInfo = if (lastPostTimestamp != null && lastPostPayload != null) {
+            "$lastPostTimestamp - $lastPostPayload"
+        } else {
+            null
+        }
+        updateNotification(status)
+        broadcastStatusUpdate(status, postInfo)
+    }
+
     override fun onCreate() {
         super.onCreate()
         val deviceId = DeviceInfoUtil.deviceId(this)
@@ -101,10 +142,14 @@ class TmmRelayService : Service() {
                                 android.util.Log.d("TmmRelayService", "Updated lastSuccessfulPostAt to current time")
                             }
                             updateNotificationWithPost(timestamp, payloadInfo)
+                            // Update status after POST to reflect new state
+                            updateDynamicStatus()
                         }
                     )
                 } else {
                     android.util.Log.d("TmmRelayService", "Skipping POST - still in 5-minute cooldown period after last successful POST")
+                    // Update status to reflect sleeping state
+                    updateDynamicStatus()
                 }
             },
             onError = { error ->
@@ -114,8 +159,9 @@ class TmmRelayService : Service() {
 
         createNotificationChannel()
         isRelayStarted = true
-        startForeground(NOTIFICATION_ID, buildNotification("Started"))
-        broadcastStatusUpdate("Started", null)
+        val initialStatus = getCurrentStatus()
+        startForeground(NOTIFICATION_ID, buildNotification(initialStatus))
+        broadcastStatusUpdate(initialStatus, null)
         wsClient.connect(tenantId, deviceId)
         handler.postDelayed(offlineCheck, TimeUnit.MINUTES.toMillis(1))
         
@@ -126,18 +172,15 @@ class TmmRelayService : Service() {
         
         // Start periodic POST calls every 5 minutes (first one will be 5 minutes after start)
         handler.postDelayed(periodicPostCheck, TimeUnit.MINUTES.toMillis(5))
+        
+        // Start status update check every 30 seconds
+        handler.postDelayed(statusUpdateCheck, TimeUnit.SECONDS.toMillis(30))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // If service is already started, broadcast current status
         if (isRelayStarted) {
-            val status = "Started"
-            val postInfo = if (lastPostTimestamp != null && lastPostPayload != null) {
-                "$lastPostTimestamp - $lastPostPayload"
-            } else {
-                null
-            }
-            broadcastStatusUpdate(status, postInfo)
+            updateDynamicStatus()
         }
         return START_STICKY
     }
@@ -231,6 +274,7 @@ class TmmRelayService : Service() {
                     lastSuccessfulPostAt = Instant.now()
                 }
                 updateNotificationWithPost(timestamp, payloadInfo)
+                updateDynamicStatus()
             }
         )
     }
@@ -260,6 +304,7 @@ class TmmRelayService : Service() {
                     android.util.Log.d("TmmRelayService", "Updated lastSuccessfulPostAt after initial POST")
                 }
                 updateNotificationWithPost(timestamp, payloadInfo)
+                updateDynamicStatus()
             }
         )
     }
@@ -289,6 +334,7 @@ class TmmRelayService : Service() {
                     android.util.Log.d("TmmRelayService", "Updated lastSuccessfulPostAt after periodic POST")
                 }
                 updateNotificationWithPost(timestamp, payloadInfo)
+                updateDynamicStatus()
             }
         )
     }
