@@ -126,20 +126,30 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun ensurePermissions() {
-        val required = mutableListOf(
-            Manifest.permission.ACCESS_FINE_LOCATION
-        )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            required += Manifest.permission.POST_NOTIFICATIONS
-        }
-        val missing = required.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (missing.isNotEmpty()) {
-            permissionLauncher.launch(missing.toTypedArray())
-        }
+  private fun ensurePermissions() {
+    val required = mutableListOf(
+        Manifest.permission.ACCESS_FINE_LOCATION
+    )
+
+    // Android 12+ (Bluetooth runtime permission)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        required += Manifest.permission.BLUETOOTH_CONNECT
     }
+
+    // Android 13+ (Notifications)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        required += Manifest.permission.POST_NOTIFICATIONS
+    }
+
+    val missing = required.filter {
+        ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+    }
+
+    if (missing.isNotEmpty()) {
+        permissionLauncher.launch(missing.toTypedArray())
+    }
+}
+
 
     private fun startRelayService() {
         val intent = Intent(this, TmmRelayService::class.java)

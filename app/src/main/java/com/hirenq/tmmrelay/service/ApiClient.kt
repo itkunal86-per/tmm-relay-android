@@ -54,6 +54,11 @@ object ApiClient {
             payload.userId?.let { put("UserId", it) }
             payload.userName?.let { put("UserName", it) }
             payload.userEmail?.let { put("UserEmail", it) }
+            payload.receiverBattery?.let { put("ReceiverBattery", it) }
+            payload.pdop?.let { put("PDOP", it) }
+            payload.hdop?.let { put("HDOP", it) }
+            payload.vdop?.let { put("VDOP", it) }
+            payload.receiverHealth?.let { put("ReceiverHealth", it) }
         }
 
         val jsonString = json.toString()

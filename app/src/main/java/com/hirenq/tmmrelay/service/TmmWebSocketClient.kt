@@ -59,89 +59,68 @@ class TmmWebSocketClient(
                 }
             }
 
-            override fun onMessage(ws: WebSocket, text: String) {
+          override fun onMessage(ws: WebSocket, text: String) {
                 try {
-                    // 🔴 CRITICAL: Always log raw message
                     Log.e("TMM_RAW", "RAW => $text")
-
                     val json = JSONObject(text)
 
-                    // ✅ DO NOT depend on "type"
-                    val hasLat = json.has("latitude")
-                    val hasLng = json.has("longitude")
-
-                    if (!hasLat || !hasLng) {
-                        Log.d(TAG, "No latitude/longitude found in message, ignoring")
-                        return
-                    }
+                    if (!json.has("latitude") || !json.has("longitude")) return
 
                     val latitude = json.optDouble("latitude", 0.0)
                     val longitude = json.optDouble("longitude", 0.0)
-                    val height = json.optDouble("height", 0.0)
                     val fixType = json.optString("fixType", "NO_FIX")
+
                     val horizontalAccuracy = json.optDouble("horizontalAccuracy", -1.0)
                     val verticalAccuracy = json.optDouble("verticalAccuracy", -1.0)
-                    val satellites = json.optInt("satellites", -1)
-                    val timestampStr = json.optString("timestamp", "")
+                    val satellites = json.optInt("satellites", 0)
 
-                    Log.d(
-                        TAG,
-                        "Parsed GNSS => Lat:$latitude Lng:$longitude Fix:$fixType Acc:$horizontalAccuracy Sat:$satellites"
-                    )
+                    // ---- Receiver Battery (optional) ----
+                    val receiverBattery =
+                        json.optInt("receiverBattery",
+                        json.optInt("batteryLevel",
+                        json.optInt("battery", -1)))
+                            .takeIf { it in 0..100 }
 
-                    // Battery is device-based (TMM does not provide it reliably)
-                    val battery = DeviceInfoUtil.batteryLevel(context)
+                    // ---- Precision DOPs (optional) ----
+                    val pdop = json.optDouble("pdop", -1.0).takeIf { it > 0 }
+                    val hdop = json.optDouble("hdop", -1.0).takeIf { it > 0 }
+                    val vdop = json.optDouble("vdop", -1.0).takeIf { it > 0 }
 
-                    val payloadTimestamp = try {
-                        if (timestampStr.isNotEmpty()) {
-                            Instant.parse(timestampStr).toString()
-                        } else {
-                            Instant.now().toString()
-                        }
-                    } catch (e: Exception) {
-                        Instant.now().toString()
+                    // ---- Receiver Health (derived) ----
+                    val receiverHealth = when {
+                        fixType == "NO_FIX" -> "NO_FIX"
+                        satellites < 4 -> "POOR"
+                        hdop != null && hdop > 2.5 -> "POOR"
+                        fixType.contains("FIX", true) && hdop != null && hdop < 1.0 -> "EXCELLENT"
+                        else -> "GOOD"
                     }
-
-                    // Optional user fields (may or may not exist)
-                    val userId =
-                        json.optString("userId")
-                            .ifEmpty { json.optString("username") }
-                            .ifEmpty { null }
-
-                    val userName =
-                        json.optString("userName")
-                            .ifEmpty { json.optString("name") }
-                            .ifEmpty { null }
-
-                    val userEmail =
-                        json.optString("userEmail")
-                            .ifEmpty { json.optString("email") }
-                            .ifEmpty { null }
 
                     val payload = TelemetryPayload(
                         tenantId = tenantId,
                         deviceId = deviceId,
                         latitude = latitude,
                         longitude = longitude,
-                        battery = battery,
+                        battery = DeviceInfoUtil.batteryLevel(context), // phone
+                        receiverBattery = receiverBattery,
                         fixType = fixType,
-                        timestamp = payloadTimestamp,
                         horizontalAccuracy = horizontalAccuracy,
                         verticalAccuracy = verticalAccuracy,
+                        pdop = pdop,
+                        hdop = hdop,
+                        vdop = vdop,
                         satellites = satellites,
-                        health = DeviceInfoUtil.health(battery, fixType, null),
-                        userId = userId,
-                        userName = userName,
-                        userEmail = userEmail
+                        receiverHealth = receiverHealth,
+                        timestamp = Instant.now().toString()
                     )
 
                     onMessage(payload)
 
-                } catch (ex: Exception) {
-                    Log.e(TAG, "Failed to parse TMM message", ex)
-                    onError(ex)
+                } catch (e: Exception) {
+                    Log.e(TAG, "GNSS parse error", e)
+                    onError(e)
                 }
             }
+
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "WebSocket failure: ${t.message}", t)

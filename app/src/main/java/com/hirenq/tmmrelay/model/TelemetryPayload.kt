@@ -14,5 +14,10 @@ data class TelemetryPayload(
     val satellites:Int,
     val userId: String? = null,
     val userName: String? = null,
-    val userEmail: String? = null
+    val userEmail: String? = null,
+    val receiverBattery: Int? = null,
+    val pdop: Double? = null,
+    val hdop: Double? = null,
+    val vdop: Double? = null,
+    val receiverHealth: String? = null
 )
