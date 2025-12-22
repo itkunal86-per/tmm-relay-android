@@ -97,7 +97,32 @@ class MainActivity : ComponentActivity() {
                 "No POST calls yet"
             }
             binding.tvPostPayload.text = postInfo
-            android.util.Log.d("MainActivity", "UI updated - Status: $status, POST: $postInfo")
+            
+            // Check if there's a failure in the postPayload
+            val isFailure = postPayload.contains("Failed:", ignoreCase = true) || 
+                           postPayload.contains("Error", ignoreCase = true)
+            
+            if (postTimestamp.isNotEmpty() && postPayload.isNotEmpty()) {
+                // Show API status
+                binding.tvFailureLabel.visibility = android.view.View.VISIBLE
+                if (isFailure) {
+                    // Show failure status in red
+                    binding.tvFailureStatus.text = "$postTimestamp: $postPayload"
+                    binding.tvFailureStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
+                    binding.tvFailureStatus.visibility = android.view.View.VISIBLE
+                } else {
+                    // Show success status (green)
+                    binding.tvFailureStatus.text = "$postTimestamp: Success - $postPayload"
+                    binding.tvFailureStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
+                    binding.tvFailureStatus.visibility = android.view.View.VISIBLE
+                }
+            } else {
+                // Hide failure status section if no POST calls yet
+                binding.tvFailureLabel.visibility = android.view.View.GONE
+                binding.tvFailureStatus.visibility = android.view.View.GONE
+            }
+            
+            android.util.Log.d("MainActivity", "UI updated - Status: $status, POST: $postInfo, Failure: $isFailure")
         }
     }
 

@@ -75,10 +75,12 @@ class TmmRelayService : Service() {
                     lastKnownFixType = payload.fixType
                     android.util.Log.d("TmmRelayService", "Updated last known location: Lat=${payload.latitude}, Lng=${payload.longitude}")
                 }
+                android.util.Log.d("TmmRelayService", "Calling ApiClient.send with payload: Lat=${payload.latitude}, Lng=${payload.longitude}")
                 ApiClient.send(
                     payload.copy(deviceId = deviceId), 
                     apiKey,
                     onPostSent = { timestamp, payloadInfo ->
+                        android.util.Log.d("TmmRelayService", "ApiClient callback received: $timestamp - $payloadInfo")
                         updateNotificationWithPost(timestamp, payloadInfo)
                     }
                 )
@@ -149,14 +151,17 @@ class TmmRelayService : Service() {
     }
 
     private fun updateNotificationWithPost(timestamp: String, payloadInfo: String) {
-        lastPostTimestamp = timestamp
-        lastPostPayload = payloadInfo
-        val status = if (isRelayStarted) "Started" else "Stopped"
-        updateNotification(status)
-        // Broadcast the POST update
-        val postInfo = "$timestamp - $payloadInfo"
-        broadcastStatusUpdate(status, postInfo)
-
+        // Ensure this runs on the main thread
+        handler.post {
+            lastPostTimestamp = timestamp
+            lastPostPayload = payloadInfo
+            val status = if (isRelayStarted) "Started" else "Stopped"
+            android.util.Log.d("TmmRelayService", "Updating notification with POST: $timestamp - $payloadInfo")
+            updateNotification(status)
+            // Broadcast the POST update
+            val postInfo = "$timestamp - $payloadInfo"
+            broadcastStatusUpdate(status, postInfo)
+        }
     }
 
    
@@ -175,6 +180,7 @@ class TmmRelayService : Service() {
     }
 
     private fun emitOffline() {
+        android.util.Log.d("TmmRelayService", "Emitting offline POST")
         val payload = TelemetryPayload(
             tenantId = tenantId,
             deviceId = DeviceInfoUtil.deviceId(this),
@@ -192,12 +198,14 @@ class TmmRelayService : Service() {
             payload, 
             apiKey,
             onPostSent = { timestamp, payloadInfo ->
+                android.util.Log.d("TmmRelayService", "Offline POST callback received: $timestamp - $payloadInfo")
                 updateNotificationWithPost(timestamp, payloadInfo)
             }
         )
     }
 
     private fun sendPeriodicPost() {
+        android.util.Log.d("TmmRelayService", "Sending periodic POST - Lat: $lastKnownLatitude, Lng: $lastKnownLongitude")
         val payload = TelemetryPayload(
             tenantId = tenantId,
             deviceId = DeviceInfoUtil.deviceId(this),
@@ -215,6 +223,7 @@ class TmmRelayService : Service() {
             payload,
             apiKey,
             onPostSent = { timestamp, payloadInfo ->
+                android.util.Log.d("TmmRelayService", "Periodic POST callback received: $timestamp - $payloadInfo")
                 updateNotificationWithPost(timestamp, payloadInfo)
             }
         )

@@ -70,4 +70,23 @@
         android:layout_marginTop="24dp"
         android:text="@string/stop_relay" />
 
+    <!-- Failure Status Section -->
+    <TextView
+        android:id="@+id/tvFailureLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="API Status:"
+        android:textStyle="bold"
+        android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
+
+    <TextView
+        android:id="@+id/tvFailureStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text=""
+        android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+        android:visibility="gone" />
+
 </LinearLayout>

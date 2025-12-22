@@ -79,11 +79,11 @@ object ApiClient {
                 Log.e(TAG, "API request failed", e)
                 e.printStackTrace()
                 // Notify callback even on failure
-                onPostSent?.invoke(
-                    Instant.now().atZone(ZoneId.of("Asia/Kolkata"))
-                        .format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-                    "Failed: ${e.message}"
-                )
+                val timestamp = Instant.now().atZone(ZoneId.of("Asia/Kolkata"))
+                    .format(DateTimeFormatter.ofPattern("HH:mm:ss"))
+                val errorMsg = "Failed: ${e.message}"
+                Log.d(TAG, "Invoking onPostSent callback on failure: $timestamp - $errorMsg")
+                onPostSent?.invoke(timestamp, errorMsg)
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -97,11 +97,14 @@ object ApiClient {
                 
                 if (!response.isSuccessful) {
                     Log.e(TAG, "API request failed with code ${response.code}: $responseBody")
-                    onPostSent?.invoke(timestamp, "Error ${response.code}: $responseBody")
+                    val errorMsg = "Error ${response.code}: $responseBody"
+                    Log.d(TAG, "Invoking onPostSent callback on error: $timestamp - $errorMsg")
+                    onPostSent?.invoke(timestamp, errorMsg)
                 } else {
                     Log.i(TAG, "API request successful")
                     // Notify callback with timestamp and payload summary
                     val payloadSummary = "Lat:${payload.latitude}, Lng:${payload.longitude}, Bat:${payload.battery}%"
+                    Log.d(TAG, "Invoking onPostSent callback on success: $timestamp - $payloadSummary")
                     onPostSent?.invoke(timestamp, payloadSummary)
                 }
                 
