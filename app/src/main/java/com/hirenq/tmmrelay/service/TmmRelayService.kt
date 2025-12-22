@@ -31,6 +31,7 @@ class TmmRelayService : Service() {
     private var lastKnownLatitude: Double = 0.0
     private var lastKnownLongitude: Double = 0.0
     private var lastKnownFixType: String = "UNKNOWN"
+    private var lastSuccessfulPostAt: Instant? = null
     private val notificationManager: NotificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
@@ -75,15 +76,36 @@ class TmmRelayService : Service() {
                     lastKnownFixType = payload.fixType
                     android.util.Log.d("TmmRelayService", "Updated last known location: Lat=${payload.latitude}, Lng=${payload.longitude}")
                 }
-                android.util.Log.d("TmmRelayService", "Calling ApiClient.send with payload: Lat=${payload.latitude}, Lng=${payload.longitude}")
-                ApiClient.send(
-                    payload.copy(deviceId = deviceId), 
-                    apiKey,
-                    onPostSent = { timestamp, payloadInfo ->
-                        android.util.Log.d("TmmRelayService", "ApiClient callback received: $timestamp - $payloadInfo")
-                        updateNotificationWithPost(timestamp, payloadInfo)
-                    }
-                )
+                
+                // Check if 5 minutes have passed since last successful POST
+                val shouldSendPost = if (lastSuccessfulPostAt != null) {
+                    val minutesSinceLastPost = java.time.Duration.between(lastSuccessfulPostAt, Instant.now()).toMinutes()
+                    val canSend = minutesSinceLastPost >= 5
+                    android.util.Log.d("TmmRelayService", "Minutes since last successful POST: $minutesSinceLastPost, Can send: $canSend")
+                    canSend
+                } else {
+                    // No previous successful POST, allow this one
+                    android.util.Log.d("TmmRelayService", "No previous successful POST, allowing POST")
+                    true
+                }
+                
+                if (shouldSendPost) {
+                    android.util.Log.d("TmmRelayService", "Calling ApiClient.send with payload: Lat=${payload.latitude}, Lng=${payload.longitude}")
+                    ApiClient.send(
+                        payload.copy(deviceId = deviceId), 
+                        apiKey,
+                        onPostSent = { timestamp, payloadInfo, isSuccess ->
+                            android.util.Log.d("TmmRelayService", "ApiClient callback received: $timestamp - $payloadInfo, Success: $isSuccess")
+                            if (isSuccess) {
+                                lastSuccessfulPostAt = Instant.now()
+                                android.util.Log.d("TmmRelayService", "Updated lastSuccessfulPostAt to current time")
+                            }
+                            updateNotificationWithPost(timestamp, payloadInfo)
+                        }
+                    )
+                } else {
+                    android.util.Log.d("TmmRelayService", "Skipping POST - still in 5-minute cooldown period after last successful POST")
+                }
             },
             onError = { error ->
                 android.util.Log.e("TmmRelayService", "WebSocket error", error)
@@ -203,8 +225,11 @@ class TmmRelayService : Service() {
         ApiClient.send(
             payload, 
             apiKey,
-            onPostSent = { timestamp, payloadInfo ->
-                android.util.Log.d("TmmRelayService", "Offline POST callback received: $timestamp - $payloadInfo")
+            onPostSent = { timestamp, payloadInfo, isSuccess ->
+                android.util.Log.d("TmmRelayService", "Offline POST callback received: $timestamp - $payloadInfo, Success: $isSuccess")
+                if (isSuccess) {
+                    lastSuccessfulPostAt = Instant.now()
+                }
                 updateNotificationWithPost(timestamp, payloadInfo)
             }
         )
@@ -228,8 +253,12 @@ class TmmRelayService : Service() {
         ApiClient.send(
             payload,
             apiKey,
-            onPostSent = { timestamp, payloadInfo ->
-                android.util.Log.d("TmmRelayService", "Initial POST callback received: $timestamp - $payloadInfo")
+            onPostSent = { timestamp, payloadInfo, isSuccess ->
+                android.util.Log.d("TmmRelayService", "Initial POST callback received: $timestamp - $payloadInfo, Success: $isSuccess")
+                if (isSuccess) {
+                    lastSuccessfulPostAt = Instant.now()
+                    android.util.Log.d("TmmRelayService", "Updated lastSuccessfulPostAt after initial POST")
+                }
                 updateNotificationWithPost(timestamp, payloadInfo)
             }
         )
@@ -253,8 +282,12 @@ class TmmRelayService : Service() {
         ApiClient.send(
             payload,
             apiKey,
-            onPostSent = { timestamp, payloadInfo ->
-                android.util.Log.d("TmmRelayService", "Periodic POST callback received: $timestamp - $payloadInfo")
+            onPostSent = { timestamp, payloadInfo, isSuccess ->
+                android.util.Log.d("TmmRelayService", "Periodic POST callback received: $timestamp - $payloadInfo, Success: $isSuccess")
+                if (isSuccess) {
+                    lastSuccessfulPostAt = Instant.now()
+                    android.util.Log.d("TmmRelayService", "Updated lastSuccessfulPostAt after periodic POST")
+                }
                 updateNotificationWithPost(timestamp, payloadInfo)
             }
         )

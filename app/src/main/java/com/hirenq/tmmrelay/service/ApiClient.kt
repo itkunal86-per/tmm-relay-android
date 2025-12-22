@@ -25,7 +25,7 @@ object ApiClient {
     fun send(
         payload: TelemetryPayload, 
         apiKey: String? = null,
-        onPostSent: ((String, String) -> Unit)? = null
+        onPostSent: ((String, String, Boolean) -> Unit)? = null
     ) {
         // Ensure Timestamp is in UTC format (with Z suffix) - parse and reformat if needed
         val timestamp = try {
@@ -78,12 +78,12 @@ object ApiClient {
             override fun onFailure(call: Call, e: IOException) {
                 Log.e(TAG, "API request failed", e)
                 e.printStackTrace()
-                // Notify callback even on failure
+                // Notify callback even on failure (isSuccess = false)
                 val timestamp = Instant.now().atZone(ZoneId.of("Asia/Kolkata"))
                     .format(DateTimeFormatter.ofPattern("HH:mm:ss"))
                 val errorMsg = "Failed: ${e.message}"
                 Log.d(TAG, "Invoking onPostSent callback on failure: $timestamp - $errorMsg")
-                onPostSent?.invoke(timestamp, errorMsg)
+                onPostSent?.invoke(timestamp, errorMsg, false)
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -99,13 +99,13 @@ object ApiClient {
                     Log.e(TAG, "API request failed with code ${response.code}: $responseBody")
                     val errorMsg = "Error ${response.code}: $responseBody"
                     Log.d(TAG, "Invoking onPostSent callback on error: $timestamp - $errorMsg")
-                    onPostSent?.invoke(timestamp, errorMsg)
+                    onPostSent?.invoke(timestamp, errorMsg, false)
                 } else {
                     Log.i(TAG, "API request successful")
-                    // Notify callback with timestamp and payload summary
+                    // Notify callback with timestamp and payload summary (isSuccess = true)
                     val payloadSummary = "Lat:${payload.latitude}, Lng:${payload.longitude}, Bat:${payload.battery}%"
                     Log.d(TAG, "Invoking onPostSent callback on success: $timestamp - $payloadSummary")
-                    onPostSent?.invoke(timestamp, payloadSummary)
+                    onPostSent?.invoke(timestamp, payloadSummary, true)
                 }
                 
                 response.close()
