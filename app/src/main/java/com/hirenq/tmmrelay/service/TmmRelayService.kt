@@ -183,7 +183,10 @@ class TmmRelayService : Service() {
             battery = DeviceInfoUtil.batteryLevel(this),
             fixType = "UNKNOWN",
             timestamp = Instant.now().toString(),
-            health = "OFFLINE"
+            health = "OFFLINE",
+            horizontalAccuracy = -1.0,
+            verticalAccuracy = -1.0,
+            satellites = -1
         )
         ApiClient.send(
             payload, 
@@ -203,7 +206,10 @@ class TmmRelayService : Service() {
             battery = DeviceInfoUtil.batteryLevel(this),
             fixType = if (lastKnownFixType != "UNKNOWN") lastKnownFixType else "PERIODIC",
             timestamp = Instant.now().toString(),
-            health = "OK"
+            health = "OK",
+            horizontalAccuracy = -1.0,
+            verticalAccuracy = -1.0,
+            satellites = -1
         )
         ApiClient.send(
             payload,

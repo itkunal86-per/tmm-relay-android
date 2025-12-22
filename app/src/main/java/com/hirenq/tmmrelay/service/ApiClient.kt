@@ -50,6 +50,10 @@ object ApiClient {
             put("FixType", payload.fixType)
             put("Timestamp", timestamp)
             put("CurrentTimestamp", currentTimestamp)
+            // Add user details if available
+            payload.userId?.let { put("UserId", it) }
+            payload.userName?.let { put("UserName", it) }
+            payload.userEmail?.let { put("UserEmail", it) }
         }
 
         val jsonString = json.toString()

@@ -81,6 +81,9 @@ class TmmWebSocketClient(
                         return
                     }
 
+                    // Log full JSON to inspect available fields (including user info)
+                    Log.d(TAG, "Full TMM JSON keys: ${json.keys().asSequence().toList()}")
+                    
                     // Parse TMM location message format
                     // Sample: { "type": "location", "latitude": 26.14331245, "longitude": 91.78923112, 
                     //          "height": 54.23, "fixType": "RTK_FIXED", "horizontalAccuracy": 0.012, ... }
@@ -92,6 +95,39 @@ class TmmWebSocketClient(
                     val verticalAccuracy = json.optDouble("verticalAccuracy", -1.0)
                     val satellites = json.optInt("satellites", -1)
                     val timestamp = json.optString("timestamp", "")
+                    
+                    // Extract logged-in user details from TMM (if available)
+                    // Common user field names that TMM might use
+                    val userId = json.optString("userId", "")
+                        .takeIf { it.isNotEmpty() } 
+                        ?: json.optString("user_id", "")
+                        .takeIf { it.isNotEmpty() }
+                        ?: json.optString("username", "")
+                        .takeIf { it.isNotEmpty() }
+                        ?: ""
+                    
+                    val userName = json.optString("userName", "")
+                        .takeIf { it.isNotEmpty() }
+                        ?: json.optString("user_name", "")
+                        .takeIf { it.isNotEmpty() }
+                        ?: json.optString("name", "")
+                        .takeIf { it.isNotEmpty() }
+                        ?: ""
+                    
+                    val userEmail = json.optString("userEmail", "")
+                        .takeIf { it.isNotEmpty() }
+                        ?: json.optString("user_email", "")
+                        .takeIf { it.isNotEmpty() }
+                        ?: json.optString("email", "")
+                        .takeIf { it.isNotEmpty() }
+                        ?: ""
+                    
+                    // Log user details if found
+                    if (userId.isNotEmpty() || userName.isNotEmpty() || userEmail.isNotEmpty()) {
+                        Log.d(TAG, "TMM User Details - UserId: $userId, UserName: $userName, Email: $userEmail")
+                    } else {
+                        Log.d(TAG, "No user details found in TMM message")
+                    }
 
                     // Validate coordinates (0,0 is invalid)
                     if (latitude == 0.0 && longitude == 0.0) {
@@ -128,7 +164,10 @@ class TmmWebSocketClient(
                         horizontalAccuracy = horizontalAccuracy,
                         verticalAccuracy = verticalAccuracy,
                         satellites = satellites,
-                        health = DeviceInfoUtil.health(battery, fixType, null)
+                        health = DeviceInfoUtil.health(battery, fixType, null),
+                        userId = userId.takeIf { it.isNotEmpty() },
+                        userName = userName.takeIf { it.isNotEmpty() },
+                        userEmail = userEmail.takeIf { it.isNotEmpty() }
                     )
 
                     onMessage(payload)

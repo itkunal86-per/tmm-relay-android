@@ -9,7 +9,10 @@ data class TelemetryPayload(
     val fixType: String,
     val timestamp: String,
     val health: String,
-    val horizontalAccuracy:String,
-    val verticalAccuracy:String,
-    val satellites:String    
+    val horizontalAccuracy:Double,
+    val verticalAccuracy:Double,
+    val satellites:Int,
+    val userId: String? = null,
+    val userName: String? = null,
+    val userEmail: String? = null
 )
