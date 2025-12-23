@@ -52,7 +52,7 @@
         android:textColor="@color/white"
         android:textSize="16sp"
         android:textStyle="bold"
-        app:backgroundTint="@color/button_background"
+        android:background="#5a5855"
         android:elevation="4dp"
         style="@style/HirenqButton" />
 
@@ -104,7 +104,7 @@
         android:textColor="@color/white"
         android:textSize="16sp"
         android:textStyle="bold"
-        app:backgroundTint="@color/button_background"
+        android:background="#5a5855"
         android:elevation="4dp"
         style="@style/HirenqButton" />
 
