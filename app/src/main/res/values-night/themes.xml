@@ -1,4 +1,4 @@
-﻿<resources>
+﻿<resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.TmmRelay" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- hirenq Brand Colors (Dark Mode) -->
         <item name="colorPrimary">@color/hirenq_orange</item>
