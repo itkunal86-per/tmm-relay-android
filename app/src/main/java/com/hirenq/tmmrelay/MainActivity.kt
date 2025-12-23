@@ -22,27 +22,60 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
+    // ---------------- STATUS RECEIVER ----------------
+
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            android.util.Log.d("MainActivity", "Received broadcast: ${intent?.action}")
             if (intent?.action == TmmRelayService.ACTION_STATUS_UPDATE) {
                 val status = intent.getStringExtra(TmmRelayService.EXTRA_STATUS) ?: "Stopped"
-                val postTimestamp = intent.getStringExtra(TmmRelayService.EXTRA_POST_TIMESTAMP) ?: ""
-                val postPayload = intent.getStringExtra(TmmRelayService.EXTRA_POST_PAYLOAD) ?: ""
-                
-                android.util.Log.d("MainActivity", "Updating UI - Status: $status, Timestamp: $postTimestamp, Payload: $postPayload")
+                val postTimestamp =
+                    intent.getStringExtra(TmmRelayService.EXTRA_POST_TIMESTAMP) ?: ""
+                val postPayload =
+                    intent.getStringExtra(TmmRelayService.EXTRA_POST_PAYLOAD) ?: ""
+
                 updateStatusUI(status, postTimestamp, postPayload)
             }
         }
     }
+
+    // ---------------- DIAGNOSTICS RECEIVER ----------------
+
+    private val diagnosticsReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != TmmRelayService.ACTION_DIAGNOSTICS_UPDATE) return
+
+            val fixType = intent.getStringExtra("fixType") ?: "UNKNOWN"
+            val satellites = intent.getIntExtra("satellites", 0)
+            val hAcc = intent.getDoubleExtra("horizontalAccuracy", -1.0)
+            val vAcc = intent.getDoubleExtra("verticalAccuracy", -1.0)
+            val receiverHealth =
+                intent.getStringExtra("receiverHealth") ?: "UNKNOWN"
+
+            val receiverBattery =
+                if (intent.hasExtra("receiverBattery"))
+                    intent.getIntExtra("receiverBattery", -1)
+                else null
+
+            updateDiagnosticsUI(
+                fixType,
+                satellites,
+                hAcc,
+                vAcc,
+                receiverHealth,
+                receiverBattery
+            )
+        }
+    }
+
+    // ---------------- LIFECYCLE ----------------
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Initialize UI with default values
         updateStatusUI("Stopped", "", "")
+        binding.tvDiagnostics.text = "Waiting for diagnostics..."
 
         binding.btnStart.setOnClickListener {
             ensurePermissions()
@@ -52,104 +85,143 @@ class MainActivity : ComponentActivity() {
         binding.btnStop.setOnClickListener {
             stopService(Intent(this, TmmRelayService::class.java))
             updateStatusUI("Stopped", "", "")
+            binding.tvDiagnostics.text = "Stopped"
         }
     }
 
     override fun onResume() {
         super.onResume()
-        // Register broadcast receiver
         try {
             LocalBroadcastManager.getInstance(this).registerReceiver(
                 statusReceiver,
                 IntentFilter(TmmRelayService.ACTION_STATUS_UPDATE)
             )
-            android.util.Log.d("MainActivity", "Broadcast receiver registered")
-            
-            // Request current status from service if it's running
-            val serviceIntent = Intent(this, TmmRelayService::class.java)
-            startService(serviceIntent) // This will trigger onStartCommand which broadcasts status
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Error registering receiver", e)
-        }
+            LocalBroadcastManager.getInstance(this).registerReceiver(
+                diagnosticsReceiver,
+                IntentFilter(TmmRelayService.ACTION_DIAGNOSTICS_UPDATE)
+            )
+
+            startService(Intent(this, TmmRelayService::class.java))
+        } catch (_: Exception) {}
     }
 
     override fun onPause() {
         super.onPause()
-        // Unregister broadcast receiver
         try {
-            LocalBroadcastManager.getInstance(this).unregisterReceiver(statusReceiver)
-            android.util.Log.d("MainActivity", "Broadcast receiver unregistered")
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Error unregistering receiver", e)
-        }
+            LocalBroadcastManager.getInstance(this)
+                .unregisterReceiver(statusReceiver)
+            LocalBroadcastManager.getInstance(this)
+                .unregisterReceiver(diagnosticsReceiver)
+        } catch (_: Exception) {}
     }
 
+    // ---------------- UI UPDATES ----------------
+
     private fun updateStatusUI(status: String, postTimestamp: String, postPayload: String) {
-        // Update UI on main thread
         runOnUiThread {
             binding.tvStatus.text = status
-            
-            val postInfo = if (postTimestamp.isNotEmpty() && postPayload.isNotEmpty()) {
-                "$postTimestamp - $postPayload"
-            } else if (postTimestamp.isNotEmpty()) {
-                postTimestamp
-            } else {
-                "No POST calls yet"
-            }
+
+            val postInfo =
+                if (postTimestamp.isNotEmpty() && postPayload.isNotEmpty())
+                    "$postTimestamp - $postPayload"
+                else if (postTimestamp.isNotEmpty())
+                    postTimestamp
+                else
+                    "No POST calls yet"
+
             binding.tvPostPayload.text = postInfo
-            
-            // Check if there's a failure in the postPayload
-            val isFailure = postPayload.contains("Failed:", ignoreCase = true) || 
-                           postPayload.contains("Error", ignoreCase = true)
-            
-            if (postTimestamp.isNotEmpty() && postPayload.isNotEmpty()) {
-                // Show API status
+
+            val isFailure =
+                postPayload.contains("Failed", true) ||
+                postPayload.contains("Error", true)
+
+            if (postTimestamp.isNotEmpty()) {
                 binding.tvFailureLabel.visibility = android.view.View.VISIBLE
-                if (isFailure) {
-                    // Show failure status in red
-                    binding.tvFailureStatus.text = "$postTimestamp: $postPayload"
-                    binding.tvFailureStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
-                    binding.tvFailureStatus.visibility = android.view.View.VISIBLE
-                } else {
-                    // Show success status (green)
-                    binding.tvFailureStatus.text = "$postTimestamp: Success - $postPayload"
-                    binding.tvFailureStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
-                    binding.tvFailureStatus.visibility = android.view.View.VISIBLE
-                }
+                binding.tvFailureStatus.visibility = android.view.View.VISIBLE
+                binding.tvFailureStatus.text =
+                    if (isFailure) "❌ $postInfo" else "✅ $postInfo"
+
+                binding.tvFailureStatus.setTextColor(
+                    ContextCompat.getColor(
+                        this,
+                        if (isFailure)
+                            android.R.color.holo_red_dark
+                        else
+                            android.R.color.holo_green_dark
+                    )
+                )
             } else {
-                // Hide failure status section if no POST calls yet
                 binding.tvFailureLabel.visibility = android.view.View.GONE
                 binding.tvFailureStatus.visibility = android.view.View.GONE
             }
-            
-            android.util.Log.d("MainActivity", "UI updated - Status: $status, POST: $postInfo, Failure: $isFailure")
         }
     }
 
-  private fun ensurePermissions() {
-    val required = mutableListOf(
-        Manifest.permission.ACCESS_FINE_LOCATION
-    )
+    private fun updateDiagnosticsUI(
+        fixType: String,
+        satellites: Int,
+        hAcc: Double,
+        vAcc: Double,
+        receiverHealth: String,
+        receiverBattery: Int?
+    ) {
+        val locationGranted =
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
 
-    // Android 12+ (Bluetooth runtime permission)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        required += Manifest.permission.BLUETOOTH_CONNECT
+        val bluetoothGranted =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
+            else true
+
+        val text = buildString {
+            append("Permissions:\n")
+            append(if (locationGranted) "✔ Location\n" else "✘ Location\n")
+            append(if (bluetoothGranted) "✔ Bluetooth\n\n" else "✘ Bluetooth\n\n")
+
+            append("Receiver:\n")
+            append(if (satellites > 0) "Connected\n" else "Not Connected\n")
+            append("Battery: ${receiverBattery?.let { "$it%" } ?: "N/A"}\n\n")
+
+            append("GNSS Fix:\n")
+            append("FixType: $fixType\n")
+            append("Satellites: $satellites\n")
+            append("Accuracy: H ${hAcc.takeIf { it > 0 } ?: "N/A"} m, ")
+            append("V ${vAcc.takeIf { it > 0 } ?: "N/A"} m\n")
+            append("Health: $receiverHealth")
+        }
+
+        binding.tvDiagnostics.text = text
     }
 
-    // Android 13+ (Notifications)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        required += Manifest.permission.POST_NOTIFICATIONS
+    // ---------------- PERMISSIONS ----------------
+
+    private fun ensurePermissions() {
+        val required = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            required += Manifest.permission.BLUETOOTH_CONNECT
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            required += Manifest.permission.POST_NOTIFICATIONS
+        }
+
+        val missing = required.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missing.isNotEmpty()) {
+            permissionLauncher.launch(missing.toTypedArray())
+        }
     }
 
-    val missing = required.filter {
-        ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-    }
-
-    if (missing.isNotEmpty()) {
-        permissionLauncher.launch(missing.toTypedArray())
-    }
-}
-
+    // ---------------- SERVICE ----------------
 
     private fun startRelayService() {
         val intent = Intent(this, TmmRelayService::class.java)

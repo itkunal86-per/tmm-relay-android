@@ -20,6 +20,23 @@
         android:layout_marginTop="8dp"
         android:text="@string/app_desc" />
 
+        <TextView
+    android:id="@+id/tvDiagnosticsTitle"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:text="Diagnostics"
+    android:textStyle="bold"
+    android:paddingTop="16dp" />
+
+<TextView
+    android:id="@+id/tvDiagnostics"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="Waiting for data..."
+    android:padding="8dp"
+    android:background="#EEEEEE" />
+
+
     <Button
         android:id="@+id/btnStart"
         android:layout_width="match_parent"

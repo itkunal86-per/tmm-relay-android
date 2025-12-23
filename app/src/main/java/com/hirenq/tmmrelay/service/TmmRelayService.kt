@@ -1,16 +1,19 @@
 package com.hirenq.tmmrelay.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.hirenq.tmmrelay.R
 import com.hirenq.tmmrelay.model.TelemetryPayload
@@ -22,85 +25,87 @@ class TmmRelayService : Service() {
 
     private lateinit var wsClient: TmmWebSocketClient
     private val tenantId = "ASSAM_LAND_REGISTRY"
-    private val apiKey: String? = null // replace with secure injection
+    private val apiKey: String? = null
+
     private var lastMessageAt: Instant = Instant.now()
-    private val handler = Handler(Looper.getMainLooper())
+    private var lastSuccessfulPostAt: Instant? = null
     private var isRelayStarted = false
+
     private var lastPostTimestamp: String? = null
     private var lastPostPayload: String? = null
-    private var lastKnownLatitude: Double = 0.0
-    private var lastKnownLongitude: Double = 0.0
-    private var lastKnownFixType: String = "UNKNOWN"
-    private var lastSuccessfulPostAt: Instant? = null
-    private val notificationManager: NotificationManager by lazy {
+
+    private var lastKnownLatitude = 0.0
+    private var lastKnownLongitude = 0.0
+    private var lastKnownFixType = "UNKNOWN"
+
+    private val handler = Handler(Looper.getMainLooper())
+
+    private val notificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
 
+    // -------------------- PERMISSION DIAGNOSTICS --------------------
+
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+    private fun hasBluetoothPermission(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+        else true
+
+    // -------------------- DIAGNOSTICS BROADCAST --------------------
+
+    private fun broadcastDiagnostics(payload: TelemetryPayload) {
+        val intent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+            putExtra("locationPermission", hasLocationPermission())
+            putExtra("bluetoothPermission", hasBluetoothPermission())
+
+            putExtra("fixType", payload.fixType)
+            putExtra("satellites", payload.satellites)
+            putExtra("horizontalAccuracy", payload.horizontalAccuracy)
+            putExtra("verticalAccuracy", payload.verticalAccuracy)
+            putExtra("receiverHealth", payload.receiverHealth ?: "UNKNOWN")
+
+            payload.receiverBattery?.let {
+                putExtra("receiverBattery", it)
+            }
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
+    // -------------------- RUNNABLES --------------------
+
     private val offlineCheck = object : Runnable {
         override fun run() {
-            val minutes = java.time.Duration.between(lastMessageAt, Instant.now()).toMinutes()
-            if (minutes >= 10) {
-                emitOffline()
-            }
+            val minutes =
+                java.time.Duration.between(lastMessageAt, Instant.now()).toMinutes()
+            if (minutes >= 10) emitOffline()
             handler.postDelayed(this, TimeUnit.MINUTES.toMillis(1))
         }
     }
 
-    // Periodic POST call every 5 minutes
     private val periodicPostCheck = object : Runnable {
         override fun run() {
-            if (isRelayStarted) {
-                // Only send periodic POST if we have valid coordinates (not 0,0)
-                if (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0) {
-                    sendPeriodicPost()
-                } else {
-                    android.util.Log.d("TmmRelayService", "Skipping periodic POST - no valid coordinates yet")
-                }
+            if (isRelayStarted && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+                sendPeriodicPost()
             }
             handler.postDelayed(this, TimeUnit.MINUTES.toMillis(5))
         }
     }
 
-    // Status update check every 30 seconds to update dynamic status
     private val statusUpdateCheck = object : Runnable {
         override fun run() {
-            if (isRelayStarted) {
-                updateDynamicStatus()
-            }
+            if (isRelayStarted) updateDynamicStatus()
             handler.postDelayed(this, TimeUnit.SECONDS.toMillis(30))
         }
     }
 
-    private fun getCurrentStatus(): String {
-        if (!isRelayStarted) {
-            return "Stopped"
-        }
-
-        return if (lastSuccessfulPostAt != null) {
-            val duration = java.time.Duration.between(lastSuccessfulPostAt, Instant.now())
-            val minutesSinceLastPost = duration.toMinutes()
-            
-            if (minutesSinceLastPost < 5) {
-                val remainingMinutes = 5 - minutesSinceLastPost
-                "Sleeping for ${remainingMinutes} minute${if (remainingMinutes != 1L) "s" else ""}"
-            } else {
-                "Waiting for websocket of TMM"
-            }
-        } else {
-            "Started"
-        }
-    }
-
-    private fun updateDynamicStatus() {
-        val status = getCurrentStatus()
-        val postInfo = if (lastPostTimestamp != null && lastPostPayload != null) {
-            "$lastPostTimestamp - $lastPostPayload"
-        } else {
-            null
-        }
-        updateNotification(status)
-        broadcastStatusUpdate(status, postInfo)
-    }
+    // -------------------- SERVICE LIFECYCLE --------------------
 
     override fun onCreate() {
         super.onCreate()
@@ -110,86 +115,56 @@ class TmmRelayService : Service() {
             context = this,
             onMessage = { payload ->
                 lastMessageAt = Instant.now()
-                // Store last known location for periodic POSTs (only if valid)
+
                 if (payload.latitude != 0.0 || payload.longitude != 0.0) {
                     lastKnownLatitude = payload.latitude
                     lastKnownLongitude = payload.longitude
                     lastKnownFixType = payload.fixType
-                    android.util.Log.d("TmmRelayService", "Updated last known location: Lat=${payload.latitude}, Lng=${payload.longitude}")
                 }
-                
-                // Check if 5 minutes have passed since last successful POST
-                val shouldSendPost = if (lastSuccessfulPostAt != null) {
-                    val minutesSinceLastPost = java.time.Duration.between(lastSuccessfulPostAt, Instant.now()).toMinutes()
-                    val canSend = minutesSinceLastPost >= 5
-                    android.util.Log.d("TmmRelayService", "Minutes since last successful POST: $minutesSinceLastPost, Can send: $canSend")
-                    canSend
-                } else {
-                    // No previous successful POST, allow this one
-                    android.util.Log.d("TmmRelayService", "No previous successful POST, allowing POST")
-                    true
-                }
-                
+
+                broadcastDiagnostics(payload)
+
+                val shouldSendPost =
+                    lastSuccessfulPostAt == null ||
+                        java.time.Duration
+                            .between(lastSuccessfulPostAt, Instant.now())
+                            .toMinutes() >= 5
+
                 if (shouldSendPost) {
-                    android.util.Log.d("TmmRelayService", "Calling ApiClient.send with payload: Lat=${payload.latitude}, Lng=${payload.longitude}")
                     ApiClient.send(
-                        payload.copy(deviceId = deviceId), 
-                        apiKey,
-                        onPostSent = { timestamp, payloadInfo, isSuccess ->
-                            android.util.Log.d("TmmRelayService", "ApiClient callback received: $timestamp - $payloadInfo, Success: $isSuccess")
-                            if (isSuccess) {
-                                lastSuccessfulPostAt = Instant.now()
-                                android.util.Log.d("TmmRelayService", "Updated lastSuccessfulPostAt to current time")
-                            }
-                            updateNotificationWithPost(timestamp, payloadInfo)
-                            // Update status after POST to reflect new state
-                            updateDynamicStatus()
-                        }
-                    )
-                } else {
-                    android.util.Log.d("TmmRelayService", "Skipping POST - still in 5-minute cooldown period after last successful POST")
-                    // Update status to reflect sleeping state
-                    updateDynamicStatus()
+                        payload.copy(deviceId = deviceId),
+                        apiKey
+                    ) { timestamp, payloadInfo, success ->
+                        if (success) lastSuccessfulPostAt = Instant.now()
+                        updateNotificationWithPost(timestamp, payloadInfo)
+                        updateDynamicStatus()
+                    }
                 }
             },
-            onError = { error ->
-                android.util.Log.e("TmmRelayService", "WebSocket error", error)
+            onError = {
+                android.util.Log.e("TmmRelayService", "WebSocket error", it)
             }
         )
 
         createNotificationChannel()
         isRelayStarted = true
-        val initialStatus = getCurrentStatus()
-        startForeground(NOTIFICATION_ID, buildNotification(initialStatus))
-        broadcastStatusUpdate(initialStatus, null)
-        wsClient.connect(tenantId, deviceId)
-        handler.postDelayed(offlineCheck, TimeUnit.MINUTES.toMillis(1))
-        
-        // Send immediate POST call when service starts
-        handler.post {
-            sendInitialPost()
-        }
-        
-        // Start periodic POST calls every 5 minutes (first one will be 5 minutes after start)
-        handler.postDelayed(periodicPostCheck, TimeUnit.MINUTES.toMillis(5))
-        
-        // Start status update check every 30 seconds
-        handler.postDelayed(statusUpdateCheck, TimeUnit.SECONDS.toMillis(30))
-    }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // If service is already started, broadcast current status
-        if (isRelayStarted) {
-            updateDynamicStatus()
-        }
-        return START_STICKY
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification("Started")
+        )
+
+        wsClient.connect(tenantId, deviceId)
+
+        handler.postDelayed(offlineCheck, TimeUnit.MINUTES.toMillis(1))
+        handler.postDelayed(periodicPostCheck, TimeUnit.MINUTES.toMillis(5))
+        handler.postDelayed(statusUpdateCheck, TimeUnit.SECONDS.toMillis(30))
     }
 
     override fun onDestroy() {
         isRelayStarted = false
         wsClient.close()
         handler.removeCallbacksAndMessages(null)
-        // Update notification to show stopped status
         updateNotification("Stopped")
         broadcastStatusUpdate("Stopped", null)
         super.onDestroy()
@@ -197,61 +172,9 @@ class TmmRelayService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun buildNotification(status: String): Notification {
-        val statusText = "Sync Relay: $status"
-        val lastPostText = if (lastPostTimestamp != null && lastPostPayload != null) {
-            "\nLast POST: $lastPostTimestamp - $lastPostPayload"
-        } else {
-            "\nNo POST calls yet"
-        }
-        
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("TMM Relay Service")
-            .setContentText(statusText + lastPostText)
-            .setStyle(NotificationCompat.BigTextStyle()
-                .bigText(statusText + lastPostText))
-            .setSmallIcon(R.drawable.ic_tracker)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
-    }
-
-    private fun updateNotification(status: String) {
-        val notification = buildNotification(status)
-        notificationManager.notify(NOTIFICATION_ID, notification)
-    }
-
-    private fun updateNotificationWithPost(timestamp: String, payloadInfo: String) {
-        // Ensure this runs on the main thread
-        handler.post {
-            lastPostTimestamp = timestamp
-            lastPostPayload = payloadInfo
-            val status = if (isRelayStarted) "Started" else "Stopped"
-            android.util.Log.d("TmmRelayService", "Updating notification with POST: $timestamp - $payloadInfo")
-            updateNotification(status)
-            // Broadcast the POST update
-            val postInfo = "$timestamp - $payloadInfo"
-            broadcastStatusUpdate(status, postInfo)
-        }
-    }
-
-   
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            mgr.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    "TMM Relay",
-                    NotificationManager.IMPORTANCE_LOW
-                )
-            )
-        }
-    }
+    // -------------------- POSTS --------------------
 
     private fun emitOffline() {
-        android.util.Log.d("TmmRelayService", "Emitting offline POST")
         val payload = TelemetryPayload(
             tenantId = tenantId,
             deviceId = DeviceInfoUtil.deviceId(this),
@@ -265,105 +188,90 @@ class TmmRelayService : Service() {
             verticalAccuracy = -1.0,
             satellites = -1
         )
-        ApiClient.send(
-            payload, 
-            apiKey,
-            onPostSent = { timestamp, payloadInfo, isSuccess ->
-                android.util.Log.d("TmmRelayService", "Offline POST callback received: $timestamp - $payloadInfo, Success: $isSuccess")
-                if (isSuccess) {
-                    lastSuccessfulPostAt = Instant.now()
-                }
-                updateNotificationWithPost(timestamp, payloadInfo)
-                updateDynamicStatus()
-            }
-        )
-    }
-
-    private fun sendInitialPost() {
-        android.util.Log.d("TmmRelayService", "Sending initial POST on service start")
-        val payload = TelemetryPayload(
-            tenantId = tenantId,
-            deviceId = DeviceInfoUtil.deviceId(this),
-            latitude = lastKnownLatitude,
-            longitude = lastKnownLongitude,
-            battery = DeviceInfoUtil.batteryLevel(this),
-            fixType = if (lastKnownFixType != "UNKNOWN") lastKnownFixType else "INITIAL",
-            timestamp = Instant.now().toString(),
-            health = if (lastKnownLatitude == 0.0 && lastKnownLongitude == 0.0) "NO_COORDINATES" else "OK",
-            horizontalAccuracy = -1.0,
-            verticalAccuracy = -1.0,
-            satellites = -1
-        )
-        ApiClient.send(
-            payload,
-            apiKey,
-            onPostSent = { timestamp, payloadInfo, isSuccess ->
-                android.util.Log.d("TmmRelayService", "Initial POST callback received: $timestamp - $payloadInfo, Success: $isSuccess")
-                if (isSuccess) {
-                    lastSuccessfulPostAt = Instant.now()
-                    android.util.Log.d("TmmRelayService", "Updated lastSuccessfulPostAt after initial POST")
-                }
-                updateNotificationWithPost(timestamp, payloadInfo)
-                updateDynamicStatus()
-            }
-        )
+        broadcastDiagnostics(payload)
     }
 
     private fun sendPeriodicPost() {
-        android.util.Log.d("TmmRelayService", "Sending periodic POST - Lat: $lastKnownLatitude, Lng: $lastKnownLongitude")
         val payload = TelemetryPayload(
             tenantId = tenantId,
             deviceId = DeviceInfoUtil.deviceId(this),
             latitude = lastKnownLatitude,
             longitude = lastKnownLongitude,
             battery = DeviceInfoUtil.batteryLevel(this),
-            fixType = if (lastKnownFixType != "UNKNOWN") lastKnownFixType else "PERIODIC",
+            fixType = lastKnownFixType,
             timestamp = Instant.now().toString(),
             health = "OK",
             horizontalAccuracy = -1.0,
             verticalAccuracy = -1.0,
             satellites = -1
         )
-        ApiClient.send(
-            payload,
-            apiKey,
-            onPostSent = { timestamp, payloadInfo, isSuccess ->
-                android.util.Log.d("TmmRelayService", "Periodic POST callback received: $timestamp - $payloadInfo, Success: $isSuccess")
-                if (isSuccess) {
-                    lastSuccessfulPostAt = Instant.now()
-                    android.util.Log.d("TmmRelayService", "Updated lastSuccessfulPostAt after periodic POST")
-                }
-                updateNotificationWithPost(timestamp, payloadInfo)
-                updateDynamicStatus()
-            }
+        broadcastDiagnostics(payload)
+    }
+
+    // -------------------- NOTIFICATION & STATUS --------------------
+
+    private fun updateDynamicStatus() {
+        val status =
+            if (!isRelayStarted) "Stopped"
+            else if (lastSuccessfulPostAt == null) "Started"
+            else "Waiting for websocket of TMM"
+
+        updateNotification(status)
+        broadcastStatusUpdate(status, null)
+    }
+
+    private fun buildNotification(status: String): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("TMM Relay Service")
+            .setContentText("Status: $status")
+            .setSmallIcon(R.drawable.ic_tracker)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+    private fun updateNotification(status: String) {
+        notificationManager.notify(
+            NOTIFICATION_ID,
+            buildNotification(status)
         )
     }
+
+    private fun updateNotificationWithPost(timestamp: String, payloadInfo: String) {
+        lastPostTimestamp = timestamp
+        lastPostPayload = payloadInfo
+        updateNotification("Started")
+    }
+
     private fun broadcastStatusUpdate(status: String, postInfo: String?) {
-        // Ensure broadcast is sent on main thread
-        handler.post {
-            val intent = Intent(ACTION_STATUS_UPDATE).apply {
-                putExtra(EXTRA_STATUS, status)
-                if (postInfo != null && postInfo.contains(" - ")) {
-                    val parts = postInfo.split(" - ", limit = 2)
-                    putExtra(EXTRA_POST_TIMESTAMP, parts[0])
-                    putExtra(EXTRA_POST_PAYLOAD, parts.getOrElse(1) { "" })
-                } else {
-                    putExtra(EXTRA_POST_TIMESTAMP, "")
-                    putExtra(EXTRA_POST_PAYLOAD, "")
-                }
-            }
-            android.util.Log.d("TmmRelayService", "Broadcasting status: $status, postInfo: $postInfo")
-            LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        val intent = Intent(ACTION_STATUS_UPDATE).apply {
+            putExtra(EXTRA_STATUS, status)
+            putExtra(EXTRA_POST_TIMESTAMP, lastPostTimestamp ?: "")
+            putExtra(EXTRA_POST_PAYLOAD, lastPostPayload ?: "")
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "TMM Relay",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            notificationManager.createNotificationChannel(channel)
         }
     }
-   
 
     companion object {
         private const val CHANNEL_ID = "tmm_channel"
         private const val NOTIFICATION_ID = 1
-        
-        // Broadcast actions
-        const val ACTION_STATUS_UPDATE = "com.hirenq.tmmrelay.STATUS_UPDATE"
+
+        const val ACTION_STATUS_UPDATE =
+            "com.hirenq.tmmrelay.STATUS_UPDATE"
+
+        const val ACTION_DIAGNOSTICS_UPDATE =
+            "com.hirenq.tmmrelay.DIAGNOSTICS_UPDATE"
+
         const val EXTRA_STATUS = "status"
         const val EXTRA_POST_TIMESTAMP = "post_timestamp"
         const val EXTRA_POST_PAYLOAD = "post_payload"
