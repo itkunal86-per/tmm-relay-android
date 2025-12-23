@@ -23,7 +23,7 @@
     
     <!-- Custom Button Style -->
     <style name="HirenqButton" parent="Widget.MaterialComponents.Button">
-        <item name="backgroundTint">@color/hirenq_orange</item>
+        <item name="backgroundTint">@color/button_background</item>
         <item name="android:textColor">@color/white</item>
         <item name="cornerRadius">8dp</item>
         <item name="android:textAllCaps">false</item>

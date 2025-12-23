@@ -7,6 +7,7 @@
     <color name="hirenq_grey_dark">#212121</color>
     <color name="hirenq_grey_light">#616161</color>
     <color name="hirenq_grey_lighter">#9E9E9E</color>
+    <color name="button_background">#5a5855</color>
     
     <!-- Material Design Colors (using hirenq brand) -->
     <color name="colorPrimary">@color/hirenq_orange</color>
