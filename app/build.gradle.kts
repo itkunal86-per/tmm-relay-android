@@ -5,12 +5,12 @@
 
 android {
     namespace = "com.hirenq.tmmrelay"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.hirenq.tmmrelay"
-        minSdk = 26
-        targetSdk = 34
+        minSdk = 29  // Android 10
+        targetSdk = 35  // Android 15 (future-proof for Android 16)
         versionCode = 1
         versionName = "1.0.0"
 

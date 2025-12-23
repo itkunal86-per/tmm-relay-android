@@ -201,6 +201,12 @@ class TmmRelayService : Service() {
         handler.postDelayed(diagnosticsUpdateCheck, TimeUnit.SECONDS.toMillis(10))
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // START_STICKY ensures service restarts if killed by system
+        // Important for Android 10-16 and Samsung One UI compatibility
+        return START_STICKY
+    }
+
     override fun onDestroy() {
         isRelayStarted = false
         wsClient.close()
