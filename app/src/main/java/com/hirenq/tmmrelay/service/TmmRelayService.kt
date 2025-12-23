@@ -262,7 +262,7 @@ class TmmRelayService : Service() {
 
     private fun buildNotification(status: String): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("TMM Relay Service")
+            .setContentTitle("AltGeo TMM Relay")
             .setContentText("Status: $status")
             .setSmallIcon(R.drawable.ic_tracker)
             .setOngoing(true)
@@ -295,7 +295,7 @@ class TmmRelayService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "TMM Relay",
+                "AltGeo TMM Relay",
                 NotificationManager.IMPORTANCE_LOW
             )
             notificationManager.createNotificationChannel(channel)

@@ -1,7 +1,30 @@
 ﻿<resources>
-    <color name="purple_500">#6200EE</color>
-    <color name="purple_700">#3700B3</color>
-    <color name="teal_200">#03DAC5</color>
+    <!-- hirenq Brand Colors -->
+    <color name="hirenq_orange">#FF6B35</color>
+    <color name="hirenq_orange_dark">#E85A2B</color>
+    <color name="hirenq_orange_light">#FF8C5A</color>
+    <color name="hirenq_grey">#424242</color>
+    <color name="hirenq_grey_dark">#212121</color>
+    <color name="hirenq_grey_light">#616161</color>
+    <color name="hirenq_grey_lighter">#9E9E9E</color>
+    
+    <!-- Material Design Colors (using hirenq brand) -->
+    <color name="colorPrimary">@color/hirenq_orange</color>
+    <color name="colorPrimaryVariant">@color/hirenq_orange_dark</color>
+    <color name="colorSecondary">@color/hirenq_grey</color>
+    <color name="colorSecondaryVariant">@color/hirenq_grey_dark</color>
+    
+    <!-- Standard Colors -->
     <color name="black">#000000</color>
     <color name="white">#FFFFFF</color>
+    <color name="background_light">#FAFAFA</color>
+    <color name="background_card">#FFFFFF</color>
+    <color name="text_primary">#212121</color>
+    <color name="text_secondary">#616161</color>
+    <color name="divider">#E0E0E0</color>
+    
+    <!-- Status Colors -->
+    <color name="success">#4CAF50</color>
+    <color name="error">#F44336</color>
+    <color name="warning">#FF9800</color>
 </resources>

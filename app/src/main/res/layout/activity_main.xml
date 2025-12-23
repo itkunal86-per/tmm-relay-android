@@ -11,14 +11,15 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/app_name"
-        android:textAppearance="@style/TextAppearance.MaterialComponents.Headline5" />
+        android:textAppearance="@style/HirenqTitle" />
 
     <TextView
         android:id="@+id/tvDesc"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="@string/app_desc" />
+        android:text="@string/app_desc"
+        android:textAppearance="@style/HirenqSubtitle" />
 
         <TextView
     android:id="@+id/tvDiagnosticsTitle"
@@ -26,6 +27,7 @@
     android:layout_height="wrap_content"
     android:text="Diagnostics"
     android:textStyle="bold"
+    android:textColor="@color/hirenq_grey"
     android:paddingTop="16dp" />
 
 <TextView
@@ -33,8 +35,10 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:text="Waiting for data..."
-    android:padding="8dp"
-    android:background="#EEEEEE" />
+    android:padding="12dp"
+    android:background="@color/background_card"
+    android:textColor="@color/text_primary"
+    android:elevation="2dp" />
 
 
     <Button
@@ -42,7 +46,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
-        android:text="@string/start_relay" />
+        android:text="@string/start_relay"
+        style="@style/HirenqButton" />
 
     <!-- Status Section -->
     <TextView
@@ -52,6 +57,7 @@
         android:layout_marginTop="24dp"
         android:text="Status:"
         android:textStyle="bold"
+        android:textColor="@color/hirenq_grey"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
 
     <TextView
@@ -70,6 +76,7 @@
         android:layout_marginTop="16dp"
         android:text="Last POST:"
         android:textStyle="bold"
+        android:textColor="@color/hirenq_grey"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
 
     <TextView
@@ -85,7 +92,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
-        android:text="@string/stop_relay" />
+        android:text="@string/stop_relay"
+        style="@style/HirenqButtonOutlined" />
 
     <!-- Failure Status Section -->
     <TextView
@@ -95,6 +103,7 @@
         android:layout_marginTop="24dp"
         android:text="API Status:"
         android:textStyle="bold"
+        android:textColor="@color/hirenq_grey"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
 
     <TextView
