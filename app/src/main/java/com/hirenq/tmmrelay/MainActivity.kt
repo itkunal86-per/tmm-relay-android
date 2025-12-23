@@ -79,6 +79,11 @@ class MainActivity : ComponentActivity() {
 
         binding.btnStart.setOnClickListener {
             ensurePermissions()
+
+            if (!hasAllCriticalPermissions()) {
+                    return@setOnClickListener
+                }
+
             startRelayService()
         }
 
@@ -89,6 +94,30 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun hasAllCriticalPermissions(): Boolean {
+    val location =
+        ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+    val bluetooth =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+        else true
+
+    val notifications =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        else true
+
+    return location && bluetooth && notifications
+}
+
+    
     override fun onResume() {
         super.onResume()
         try {
@@ -101,7 +130,7 @@ class MainActivity : ComponentActivity() {
                 IntentFilter(TmmRelayService.ACTION_DIAGNOSTICS_UPDATE)
             )
 
-            startService(Intent(this, TmmRelayService::class.java))
+            //startService(Intent(this, TmmRelayService::class.java))
         } catch (_: Exception) {}
     }
 

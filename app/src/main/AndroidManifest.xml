@@ -36,7 +36,7 @@
 
         <service
             android:name=".service.TmmRelayService"
-            android:foregroundServiceType="location"
+            android:foregroundServiceType="location|connectedDevice"
             android:exported="false"
             android:stopWithTask="false" />
 
