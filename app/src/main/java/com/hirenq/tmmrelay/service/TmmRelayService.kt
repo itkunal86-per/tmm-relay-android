@@ -105,6 +105,29 @@ class TmmRelayService : Service() {
         }
     }
 
+    private val diagnosticsUpdateCheck = object : Runnable {
+        override fun run() {
+            if (isRelayStarted) {
+                // Broadcast diagnostics periodically even if no messages received
+                val payload = TelemetryPayload(
+                    tenantId = tenantId,
+                    deviceId = DeviceInfoUtil.deviceId(this@TmmRelayService),
+                    latitude = lastKnownLatitude,
+                    longitude = lastKnownLongitude,
+                    battery = DeviceInfoUtil.batteryLevel(this@TmmRelayService),
+                    fixType = lastKnownFixType,
+                    timestamp = Instant.now().toString(),
+                    health = "OK",
+                    horizontalAccuracy = -1.0,
+                    verticalAccuracy = -1.0,
+                    satellites = -1
+                )
+                broadcastDiagnostics(payload)
+            }
+            handler.postDelayed(this, TimeUnit.SECONDS.toMillis(10))
+        }
+    }
+
     // -------------------- SERVICE LIFECYCLE --------------------
 
     override fun onCreate() {
@@ -156,9 +179,26 @@ class TmmRelayService : Service() {
 
         wsClient.connect(tenantId, deviceId)
 
+        // Send initial diagnostics broadcast
+        val initialPayload = TelemetryPayload(
+            tenantId = tenantId,
+            deviceId = deviceId,
+            latitude = 0.0,
+            longitude = 0.0,
+            battery = DeviceInfoUtil.batteryLevel(this),
+            fixType = "UNKNOWN",
+            timestamp = Instant.now().toString(),
+            health = "OK",
+            horizontalAccuracy = -1.0,
+            verticalAccuracy = -1.0,
+            satellites = -1
+        )
+        broadcastDiagnostics(initialPayload)
+
         handler.postDelayed(offlineCheck, TimeUnit.MINUTES.toMillis(1))
         handler.postDelayed(periodicPostCheck, TimeUnit.MINUTES.toMillis(5))
         handler.postDelayed(statusUpdateCheck, TimeUnit.SECONDS.toMillis(30))
+        handler.postDelayed(diagnosticsUpdateCheck, TimeUnit.SECONDS.toMillis(10))
     }
 
     override fun onDestroy() {
