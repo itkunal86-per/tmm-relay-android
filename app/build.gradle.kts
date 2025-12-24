@@ -100,11 +100,17 @@ dependencies {
     implementation(project(":CatalystFacade"))
 
     // Local AAR libraries from libs folder
-    implementation(name = "empowerlib-1.2.0.26", ext = "aar")
-    implementation(name = "JTDDTransformation-release", ext = "aar")
-    implementation(name = "trimble.jssi.android.communicators-release", ext = "aar")
-    implementation(name = "trimble.jssi.core-release", ext = "aar")
-    implementation(name = "Trimble.Licensing.Android", ext = "aar")
+    // These libraries are used for Trimble SDK functionality:
+    // - Trimble.Licensing.Android: Required for SDK licensing (initialized via TrimbleLicensingUtil)
+    // - trimble.jssi.core-release: Core JSSI library (used by CatalystFacade)
+    // - trimble.jssi.android.communicators-release: Android communicators for JSSI (used by CatalystFacade)
+    // - JTDDTransformation-release: Coordinate transformation library (available via CoordinateTransformUtil)
+    // - empowerlib-1.2.0.26: Empower library for additional Trimble functionality
+    implementation(mapOf("name" to "empowerlib-1.2.0.26", "ext" to "aar"))
+    implementation(mapOf("name" to "JTDDTransformation-release", "ext" to "aar"))
+    implementation(mapOf("name" to "trimble.jssi.android.communicators-release", "ext" to "aar"))
+    implementation(mapOf("name" to "trimble.jssi.core-release", "ext" to "aar"))
+    implementation(mapOf("name" to "Trimble.Licensing.Android", "ext" to "aar"))
 
     // Testing
    testImplementation("junit:junit:4.13.2")

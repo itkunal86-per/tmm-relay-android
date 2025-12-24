@@ -19,6 +19,7 @@ import com.hirenq.tmmrelay.R
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
 import com.hirenq.tmmrelay.util.SettingsUtil
+import com.hirenq.tmmrelay.util.TrimbleLicensingUtil
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
@@ -134,6 +135,10 @@ class TmmRelayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        
+        // Initialize Trimble Licensing SDK early (required for Trimble SDK features)
+        TrimbleLicensingUtil.initialize(this)
+        
         val deviceId = DeviceInfoUtil.deviceId(this)
         val useCatalyst = SettingsUtil.useCatalyst(this)
 

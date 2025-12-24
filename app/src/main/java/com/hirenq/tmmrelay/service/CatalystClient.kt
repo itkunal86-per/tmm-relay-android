@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
+import com.hirenq.tmmrelay.util.TrimbleLicensingUtil
 import trimble.jssi.android.catalystfacade.CatalystFacade
 import trimble.jssi.android.catalystfacade.ICatalystEventListener
 import trimble.jssi.android.catalystfacade.PositionUpdate
@@ -36,6 +37,10 @@ class CatalystClient(
         this.deviceId = deviceId
         
         try {
+            Log.i(TAG, "Initializing Trimble Licensing")
+            // Initialize Trimble Licensing before using SDK
+            TrimbleLicensingUtil.initialize(context)
+            
             Log.i(TAG, "Initializing Catalyst SDK")
             
             // Create CatalystFacade instance
