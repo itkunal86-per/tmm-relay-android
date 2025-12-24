@@ -55,6 +55,12 @@ signingConfigs {
     
 }
 
+repositories {
+    flatDir {
+        dirs("../lib")
+    }
+}
+
 dependencies {
 
     // Core Android
