@@ -18,12 +18,14 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.hirenq.tmmrelay.R
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
+import com.hirenq.tmmrelay.util.SettingsUtil
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 class TmmRelayService : Service() {
 
-    private lateinit var wsClient: TmmWebSocketClient
+    private var wsClient: TmmWebSocketClient? = null
+    private var catalystClient: CatalystClient? = null
     private val tenantId = "ASSAM_LAND_REGISTRY"
     private val apiKey: String? = null
 
@@ -133,41 +135,58 @@ class TmmRelayService : Service() {
     override fun onCreate() {
         super.onCreate()
         val deviceId = DeviceInfoUtil.deviceId(this)
+        val useCatalyst = SettingsUtil.useCatalyst(this)
 
-        wsClient = TmmWebSocketClient(
-            context = this,
-            onMessage = { payload ->
-                lastMessageAt = Instant.now()
+        // Common handler for processing payloads from either client
+        val payloadHandler: (TelemetryPayload) -> Unit = { payload ->
+            lastMessageAt = Instant.now()
 
-                if (payload.latitude != 0.0 || payload.longitude != 0.0) {
-                    lastKnownLatitude = payload.latitude
-                    lastKnownLongitude = payload.longitude
-                    lastKnownFixType = payload.fixType
-                }
-
-                broadcastDiagnostics(payload)
-
-                val shouldSendPost =
-                    lastSuccessfulPostAt == null ||
-                        java.time.Duration
-                            .between(lastSuccessfulPostAt, Instant.now())
-                            .toMinutes() >= 5
-
-                if (shouldSendPost) {
-                    ApiClient.send(
-                        payload.copy(deviceId = deviceId),
-                        apiKey
-                    ) { timestamp, payloadInfo, success ->
-                        if (success) lastSuccessfulPostAt = Instant.now()
-                        updateNotificationWithPost(timestamp, payloadInfo)
-                        updateDynamicStatus()
-                    }
-                }
-            },
-            onError = {
-                android.util.Log.e("TmmRelayService", "WebSocket error", it)
+            if (payload.latitude != 0.0 || payload.longitude != 0.0) {
+                lastKnownLatitude = payload.latitude
+                lastKnownLongitude = payload.longitude
+                lastKnownFixType = payload.fixType
             }
-        )
+
+            broadcastDiagnostics(payload)
+
+            val shouldSendPost =
+                lastSuccessfulPostAt == null ||
+                    java.time.Duration
+                        .between(lastSuccessfulPostAt, Instant.now())
+                        .toMinutes() >= 5
+
+            if (shouldSendPost) {
+                ApiClient.send(
+                    payload.copy(deviceId = deviceId),
+                    apiKey
+                ) { timestamp, payloadInfo, success ->
+                    if (success) lastSuccessfulPostAt = Instant.now()
+                    updateNotificationWithPost(timestamp, payloadInfo)
+                    updateDynamicStatus()
+                }
+            }
+        }
+
+        // Initialize the selected client based on setting
+        if (useCatalyst) {
+            android.util.Log.i("TmmRelayService", "Using Catalyst SDK")
+            catalystClient = CatalystClient(
+                context = this,
+                onMessage = payloadHandler,
+                onError = {
+                    android.util.Log.e("TmmRelayService", "Catalyst error", it)
+                }
+            )
+        } else {
+            android.util.Log.i("TmmRelayService", "Using WebSocket")
+            wsClient = TmmWebSocketClient(
+                context = this,
+                onMessage = payloadHandler,
+                onError = {
+                    android.util.Log.e("TmmRelayService", "WebSocket error", it)
+                }
+            )
+        }
 
         createNotificationChannel()
         isRelayStarted = true
@@ -177,7 +196,12 @@ class TmmRelayService : Service() {
             buildNotification("Started")
         )
 
-        wsClient.connect(tenantId, deviceId)
+        // Connect the selected client
+        if (useCatalyst) {
+            catalystClient?.connect(tenantId, deviceId)
+        } else {
+            wsClient?.connect(tenantId, deviceId)
+        }
 
         // Send initial diagnostics broadcast
         val initialPayload = TelemetryPayload(
@@ -209,7 +233,11 @@ class TmmRelayService : Service() {
 
     override fun onDestroy() {
         isRelayStarted = false
-        wsClient.close()
+        
+        // Close the active client
+        wsClient?.close()
+        catalystClient?.close()
+        
         handler.removeCallbacksAndMessages(null)
         updateNotification("Stopped")
         broadcastStatusUpdate("Stopped", null)
@@ -257,10 +285,13 @@ class TmmRelayService : Service() {
     // -------------------- NOTIFICATION & STATUS --------------------
 
     private fun updateDynamicStatus() {
+        val useCatalyst = SettingsUtil.useCatalyst(this)
+        val clientName = if (useCatalyst) "Catalyst SDK" else "TMM WebSocket"
+        
         val status =
             if (!isRelayStarted) "Stopped"
-            else if (lastSuccessfulPostAt == null) "Started"
-            else "Waiting for websocket of TMM"
+            else if (lastSuccessfulPostAt == null) "Started ($clientName)"
+            else "Waiting for $clientName"
 
         updateNotification(status)
         broadcastStatusUpdate(status, null)

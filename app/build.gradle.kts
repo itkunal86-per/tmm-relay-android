@@ -79,6 +79,9 @@ dependencies {
     // Coroutines (background work)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
+    // Trimble Catalyst SDK - AAR files from lib folder (root level)
+    implementation(fileTree(mapOf("dir" to "../lib", "include" to listOf("*.aar"))))
+
     // Testing
    testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
