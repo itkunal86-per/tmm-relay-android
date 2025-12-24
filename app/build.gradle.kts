@@ -68,7 +68,7 @@ repositories {
     google()
     mavenCentral()
     flatDir {
-        dirs("lib")
+        dirs("libs")
     }
 }
 
@@ -98,6 +98,13 @@ dependencies {
 
     // Trimble Catalyst SDK - Import as module (CORRECT WAY)
     implementation(project(":CatalystFacade"))
+
+    // Local AAR libraries from libs folder
+    implementation(name = "empowerlib-1.2.0.26", ext = "aar")
+    implementation(name = "JTDDTransformation-release", ext = "aar")
+    implementation(name = "trimble.jssi.android.communicators-release", ext = "aar")
+    implementation(name = "trimble.jssi.core-release", ext = "aar")
+    implementation(name = "Trimble.Licensing.Android", ext = "aar")
 
     // Testing
    testImplementation("junit:junit:4.13.2")
