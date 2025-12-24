@@ -56,8 +56,10 @@ signingConfigs {
 }
 
 repositories {
+    google()
+    mavenCentral()
     flatDir {
-        dirs("../lib")
+        dirs("lib")
     }
 }
 
@@ -85,8 +87,15 @@ dependencies {
     // Coroutines (background work)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // Trimble Catalyst SDK - AAR files from lib folder (root level)
-    implementation(fileTree(mapOf("dir" to "../lib", "include" to listOf("*.aar"))))
+    // Trimble Catalyst SDK - AAR files from app/lib folder
+    implementation(fileTree(mapOf("dir" to "lib", "include" to listOf("*.aar"))))
+    
+    // Explicitly include each AAR file for better dependency resolution
+    implementation(name = "Trimble.Licensing.Android", ext = "aar")
+    implementation(name = "trimble.jssi.core-release", ext = "aar")
+    implementation(name = "trimble.jssi.android.communicators-release", ext = "aar")
+    implementation(name = "JTDDTransformation-release", ext = "aar")
+    implementation(name = "empowerlib-1.2.0.26", ext = "aar")
 
     // Testing
    testImplementation("junit:junit:4.13.2")
