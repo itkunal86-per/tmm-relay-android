@@ -21,6 +21,18 @@ android {
     }
 }
 
+repositories {
+    flatDir {
+        dirs '../app/libs'
+    }
+}
+
 dependencies {
-    compileOnly fileTree(dir: '../SSI/libs', include: ['*.aar'], exclude: [])
+    // Trimble JSSI core and communicators libraries required for compilation
+    api(name: 'trimble.jssi.core-release', ext: 'aar')
+    api(name: 'trimble.jssi.android.communicators-release', ext: 'aar')
+    // Other libraries that may be needed
+    compileOnly(name: 'empowerlib-1.2.0.26', ext: 'aar')
+    compileOnly(name: 'JTDDTransformation-release', ext: 'aar')
+    compileOnly(name: 'Trimble.Licensing.Android', ext: 'aar')
 }
