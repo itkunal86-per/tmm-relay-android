@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:versionCode="1"
+    android:versionName="1.0" >
+
+    <uses-permission android:name="com.trimble.empower.permission.ACCESS_MODULE_MANAGER" />
+    <uses-permission android:name="com.trimble.empower.permission.CLAIM_MODULE" />
+    <application/>
+</manifest>
