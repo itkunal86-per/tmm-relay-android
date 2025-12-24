@@ -22,6 +22,8 @@ android {
 }
 
 repositories {
+    google()
+    mavenCentral()
     flatDir {
         dirs new File(rootProject.projectDir, 'app/libs')
     }
