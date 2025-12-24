@@ -88,14 +88,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     // Trimble Catalyst SDK - AAR files from app/lib folder
+    // fileTree automatically includes all .aar files from the lib directory
     implementation(fileTree(mapOf("dir" to "lib", "include" to listOf("*.aar"))))
-    
-    // Explicitly include each AAR file for better dependency resolution
-    implementation(name = "Trimble.Licensing.Android", ext = "aar")
-    implementation(name = "trimble.jssi.core-release", ext = "aar")
-    implementation(name = "trimble.jssi.android.communicators-release", ext = "aar")
-    implementation(name = "JTDDTransformation-release", ext = "aar")
-    implementation(name = "empowerlib-1.2.0.26", ext = "aar")
 
     // Testing
    testImplementation("junit:junit:4.13.2")
