@@ -15,7 +15,11 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Enable multi-dex if needed for large AAR files
+        multiDexEnabled = true
     }
+    
 signingConfigs {
         create("release") {
             storeFile = file("release.keystore")
@@ -53,6 +57,11 @@ signingConfigs {
         buildConfig = true
     }
     
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
 }
 
 repositories {
@@ -87,9 +96,8 @@ dependencies {
     // Coroutines (background work)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // Trimble Catalyst SDK - AAR files from app/lib folder
-    // fileTree automatically includes all .aar files from the lib directory
-    implementation(fileTree(mapOf("dir" to "lib", "include" to listOf("*.aar"))))
+    // Trimble Catalyst SDK - Import as module (CORRECT WAY)
+    implementation(project(":CatalystFacade"))
 
     // Testing
    testImplementation("junit:junit:4.13.2")

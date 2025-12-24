@@ -4,10 +4,13 @@ import android.content.Context
 import android.util.Log
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
-import com.trimble.catalyst.facade.CatalystFacade
-import com.trimble.catalyst.facade.licensing.*
-import com.trimble.catalyst.facade.receiver.*
-import com.trimble.catalyst.facade.positioning.*
+import trimble.jssi.android.catalystfacade.CatalystFacade
+import trimble.jssi.android.catalystfacade.ICatalystEventListener
+import trimble.jssi.android.catalystfacade.PositionUpdate
+import trimble.jssi.android.catalystfacade.SatelliteUpdate
+import trimble.jssi.android.catalystfacade.PowerSourceState
+import trimble.jssi.android.catalystfacade.SensorStateEvent
+import trimble.jssi.android.catalystfacade.ReturnCode
 import java.time.Instant
 
 class CatalystClient(
@@ -17,15 +20,16 @@ class CatalystClient(
 ) {
 
     private val TAG = "CatalystClient"
-    private var isInitialized = false
-    private var isPositioning = false
-    private var isLicenseActive = false
+    private var facade: CatalystFacade? = null
     private var tenantId: String = ""
     private var deviceId: String = ""
+    private var isSurveying = false
     
-    private var licenseListener: LicenseListener? = null
-    private var receiverListener: ReceiverListener? = null
-    private var positionListener: PositionListener? = null
+    // Track latest values from different event types
+    private var latestPosition: PositionUpdate? = null
+    private var latestSatellites: SatelliteUpdate? = null
+    private var latestBattery: PowerSourceState? = null
+    private var latestHealth: SensorStateEvent? = null
 
     fun connect(tenantId: String, deviceId: String) {
         this.tenantId = tenantId
@@ -34,216 +38,154 @@ class CatalystClient(
         try {
             Log.i(TAG, "Initializing Catalyst SDK")
             
-            if (!isInitialized) {
-                CatalystFacade.initialize(context.applicationContext)
-                isInitialized = true
+            // Create CatalystFacade instance
+            facade = CatalystFacade(context.applicationContext)
+            
+            // Initialize the facade
+            val initRc = facade!!.initialize()
+            Log.d(TAG, "Catalyst init return code: $initRc")
+            
+            if (initRc != ReturnCode.SUCCESS) {
+                val error = RuntimeException("Catalyst initialization failed with code: $initRc")
+                Log.e(TAG, "Failed to initialize Catalyst", error)
+                onError(error)
+                return
             }
-
-            // Set up license listener FIRST (required before connecting)
-            licenseListener = object : LicenseListener {
-                override fun onLicenseStateChanged(state: LicenseState) {
-                    Log.d(TAG, "License state: $state")
-                    
-                    when (state) {
-                        LicenseState.ACTIVE -> {
-                            isLicenseActive = true
-                            connectReceiver()
+            
+            // Set up event listener
+            facade!!.setEventListener { event ->
+                try {
+                    when (event) {
+                        is PositionUpdate -> {
+                            latestPosition = event
+                            Log.d(TAG, "Position: lat=${event.latitude}, lon=${event.longitude}, acc=${event.horizontalAccuracy}, fix=${event.fixType}")
+                            // Create telemetry payload when we have position data
+                            createAndSendTelemetry()
                         }
-                        LicenseState.INACTIVE -> {
-                            isLicenseActive = false
-                            Log.w(TAG, "License inactive - subscription may be expired")
-                            onError(RuntimeException("License inactive"))
+                        is SatelliteUpdate -> {
+                            latestSatellites = event
+                            Log.d(TAG, "Satellites: count=${event.satelliteCount}")
+                            // Update telemetry if we have position
+                            latestPosition?.let { createAndSendTelemetry() }
                         }
-                        LicenseState.CHECKING -> {
-                            Log.d(TAG, "Checking license status...")
+                        is PowerSourceState -> {
+                            latestBattery = event
+                            Log.d(TAG, "Battery: ${event.batteryPercentage}%")
                         }
-                        LicenseState.ERROR -> {
-                            isLicenseActive = false
-                            Log.e(TAG, "License error state")
-                            onError(RuntimeException("License error"))
+                        is SensorStateEvent -> {
+                            latestHealth = event
+                            Log.d(TAG, "Sensor health: ${event.healthState}")
+                        }
+                        else -> {
+                            Log.d(TAG, "Other event: ${event.javaClass.simpleName}")
                         }
                     }
-                }
-
-                override fun onLicenseError(error: LicenseError) {
-                    Log.e(TAG, "License error: $error")
-                    onError(RuntimeException("License error: $error"))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error processing Catalyst event", e)
+                    onError(e)
                 }
             }
-
-            CatalystFacade.addLicenseListener(licenseListener!!)
-
+            
+            // Start survey
+            startSurvey()
+            
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize Catalyst", e)
             onError(e)
         }
     }
-
-    private fun connectReceiver() {
-        if (!isLicenseActive) {
-            Log.w(TAG, "Cannot connect receiver - license not active")
+    
+    private fun startSurvey() {
+        if (isSurveying) {
+            Log.w(TAG, "Survey already started")
             return
         }
-
+        
         try {
-            Log.i(TAG, "Connecting DA2 receiver")
-
-            receiverListener = object : ReceiverListener {
-                override fun onReceiverConnected(receiver: ReceiverInfo) {
-                    Log.i(TAG, "DA2 Receiver Connected: ${receiver.model}")
-                    startPositioning()
-                }
-
-                override fun onReceiverDisconnected() {
-                    Log.w(TAG, "DA2 Receiver Disconnected")
-                    isPositioning = false
-                }
-
-                override fun onReceiverError(error: ReceiverError) {
-                    Log.e(TAG, "Receiver error: $error")
-                    onError(RuntimeException("Receiver error: $error"))
-                }
-            }
-
-            CatalystFacade.addReceiverListener(receiverListener!!)
-            CatalystFacade.connectReceiver()
-
+            Log.i(TAG, "Starting Catalyst survey")
+            facade?.startSurvey()
+            isSurveying = true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to connect receiver", e)
+            Log.e(TAG, "Failed to start survey", e)
             onError(e)
         }
     }
-
-    private fun startPositioning() {
-        if (isPositioning) {
-            Log.w(TAG, "Positioning already started")
-            return
-        }
-
-        if (!isLicenseActive) {
-            Log.w(TAG, "Cannot start positioning - license not active")
-            return
-        }
-
+    
+    private fun createAndSendTelemetry() {
+        val position = latestPosition ?: return
+        
         try {
-            Log.i(TAG, "Starting positioning")
-
-            val options = PositioningOptions.Builder()
-                .setAccuracy(PositionAccuracy.HIGH)
-                .build()
-
-            positionListener = object : PositionListener {
-                override fun onPositionUpdate(position: Position) {
-                    try {
-                        val payload = mapToTelemetryPayload(position)
-                        Log.d(TAG, "Position update: lat=${position.latitude}, lon=${position.longitude}, fix=${position.fixType.name}")
-                        onMessage(payload)
-
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error processing position update", e)
-                        onError(e)
-                    }
-                }
-
-                override fun onPositionError(error: PositionError) {
-                    Log.e(TAG, "Position error: $error")
-                    onError(RuntimeException("Position error: $error"))
-                }
+            // Map PositionUpdate and other events to TelemetryPayload
+            // fixType might be String or enum - convert to String
+            val fixTypeName = position.fixType?.toString() ?: "UNKNOWN"
+            
+            // Calculate receiver health based on position and satellite data
+            val receiverHealth = when {
+                fixTypeName.contains("INVALID", ignoreCase = true) || 
+                fixTypeName.contains("NO_FIX", ignoreCase = true) -> "NO_FIX"
+                (latestSatellites?.satelliteCount ?: 0) < 4 -> "POOR"
+                (position.horizontalAccuracy ?: Double.MAX_VALUE) > 2.5 -> "POOR"
+                (position.horizontalAccuracy ?: Double.MAX_VALUE) < 1.0 -> "EXCELLENT"
+                else -> "GOOD"
             }
-
-            CatalystFacade.startPositioning(options, positionListener!!)
-            isPositioning = true
-
+            
+            // Calculate overall health
+            val health = when {
+                position.latitude == 0.0 && position.longitude == 0.0 -> "NO_COORDINATES"
+                fixTypeName.contains("INVALID", ignoreCase = true) || 
+                fixTypeName.contains("NO_FIX", ignoreCase = true) -> "NO_FIX"
+                latestHealth?.healthState?.contains("ERROR", ignoreCase = true) == true -> "ERROR"
+                else -> "OK"
+            }
+            
+            val payload = TelemetryPayload(
+                tenantId = tenantId,
+                deviceId = deviceId,
+                latitude = position.latitude,
+                longitude = position.longitude,
+                battery = latestBattery?.batteryPercentage?.toInt() 
+                    ?: DeviceInfoUtil.batteryLevel(context), // Use receiver battery if available, else phone battery
+                fixType = fixTypeName,
+                timestamp = Instant.now().toString(),
+                health = health,
+                horizontalAccuracy = position.horizontalAccuracy ?: -1.0,
+                verticalAccuracy = position.verticalAccuracy ?: -1.0,
+                satellites = latestSatellites?.satelliteCount ?: 0,
+                receiverBattery = latestBattery?.batteryPercentage?.toInt()?.takeIf { it in 0..100 },
+                pdop = position.pdop,
+                hdop = position.hdop,
+                vdop = position.vdop,
+                receiverHealth = receiverHealth
+            )
+            
+            onMessage(payload)
+            
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start positioning", e)
+            Log.e(TAG, "Error creating telemetry payload", e)
             onError(e)
         }
-    }
-
-    private fun mapToTelemetryPayload(position: Position): TelemetryPayload {
-        val fixTypeName = position.fixType.name
-        
-        // Get receiver info if available
-        val receiverInfo = try {
-            CatalystFacade.getReceiverInfo()
-        } catch (e: Exception) {
-            null
-        }
-        
-        val actualDeviceId = receiverInfo?.serialNumber ?: deviceId
-        
-        // Calculate receiver health
-        val receiverHealth = when {
-            position.fixType == FixType.INVALID -> "NO_FIX"
-            (position.satellitesUsed ?: 0) < 4 -> "POOR"
-            (position.horizontalAccuracy ?: 0.0) > 2.5 -> "POOR"
-            position.fixType != FixType.INVALID && (position.horizontalAccuracy ?: 0.0) < 1.0 -> "EXCELLENT"
-            else -> "GOOD"
-        }
-
-        // Calculate overall health
-        val health = when {
-            position.latitude == 0.0 && position.longitude == 0.0 -> "NO_COORDINATES"
-            position.fixType == FixType.INVALID -> "NO_FIX"
-            else -> "OK"
-        }
-
-        return TelemetryPayload(
-            tenantId = tenantId,
-            deviceId = actualDeviceId,
-            latitude = position.latitude,
-            longitude = position.longitude,
-            battery = DeviceInfoUtil.batteryLevel(context), // phone battery
-            fixType = fixTypeName,
-            timestamp = Instant.now().toString(),
-            health = health,
-            horizontalAccuracy = position.horizontalAccuracy ?: -1.0,
-            verticalAccuracy = position.verticalAccuracy ?: -1.0,
-            satellites = position.satellitesUsed ?: 0,
-            receiverBattery = position.receiverBattery?.takeIf { it in 0..100 },
-            pdop = position.pdop,
-            hdop = position.hdop,
-            vdop = position.vdop,
-            receiverHealth = receiverHealth
-        )
     }
 
     fun close() {
         try {
             Log.i(TAG, "Closing Catalyst client")
             
-            if (isPositioning) {
-                CatalystFacade.stopPositioning()
-                isPositioning = false
-            }
-
-            CatalystFacade.disconnectReceiver()
-            
-            // Clean up listeners
-            licenseListener?.let {
-                try {
-                    CatalystFacade.removeLicenseListener(it)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not remove license listener", e)
-                }
+            if (isSurveying) {
+                facade?.stopSurvey()
+                isSurveying = false
             }
             
-            receiverListener?.let {
-                try {
-                    CatalystFacade.removeReceiverListener(it)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not remove receiver listener", e)
-                }
-            }
+            facade?.shutdown()
+            facade = null
             
-            licenseListener = null
-            receiverListener = null
-            positionListener = null
-            isLicenseActive = false
+            // Clear cached data
+            latestPosition = null
+            latestSatellites = null
+            latestBattery = null
+            latestHealth = null
 
         } catch (e: Exception) {
             Log.e(TAG, "Error closing Catalyst client", e)
         }
     }
 }
-

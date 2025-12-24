@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "TmmRelay"
-include(":app")
+include(":app", ":CatalystFacade")
