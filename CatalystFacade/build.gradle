@@ -23,7 +23,7 @@ android {
 
 repositories {
     flatDir {
-        dirs 'app/libs'
+        dirs new File(rootProject.projectDir, 'app/libs')
     }
 }
 
