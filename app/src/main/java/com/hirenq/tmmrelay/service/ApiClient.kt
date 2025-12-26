@@ -41,8 +41,10 @@ object ApiClient {
             .atZone(ZoneId.of("Asia/Kolkata"))
             .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX"))
 
-        // Match the exact JSON structure from the working curl command
+        // Include all fields from TelemetryPayload in the POST request
         val json = JSONObject().apply {
+            // Required fields
+            put("TenantId", payload.tenantId)
             put("DeviceId", payload.deviceId)
             put("Latitude", payload.latitude)
             put("Longitude", payload.longitude)
@@ -50,20 +52,36 @@ object ApiClient {
             put("FixType", payload.fixType)
             put("Timestamp", timestamp)
             put("CurrentTimestamp", currentTimestamp)
-            // Add user details if available
+            put("Health", payload.health)
+            put("HorizontalAccuracy", payload.horizontalAccuracy)
+            put("VerticalAccuracy", payload.verticalAccuracy)
+            put("Satellites", payload.satellites)
+            
+            // Optional user details
             payload.userId?.let { put("UserId", it) }
             payload.userName?.let { put("UserName", it) }
             payload.userEmail?.let { put("UserEmail", it) }
+            
+            // Optional receiver details
             payload.receiverBattery?.let { put("ReceiverBattery", it) }
+            payload.receiverHealth?.let { put("ReceiverHealth", it) }
+            
+            // Optional DOP values
             payload.pdop?.let { put("PDOP", it) }
             payload.hdop?.let { put("HDOP", it) }
             payload.vdop?.let { put("VDOP", it) }
-            payload.receiverHealth?.let { put("ReceiverHealth", it) }
         }
 
         val jsonString = json.toString()
-        Log.d(TAG, "Sending POST request to $API_URL")
-        Log.d(TAG, "Request body: $jsonString")
+        Log.i(TAG, "=== Sending POST request to $API_URL ===")
+        Log.i(TAG, "Full payload JSON: $jsonString")
+        Log.d(TAG, "Payload fields: TenantId=${payload.tenantId}, DeviceId=${payload.deviceId}, " +
+                "Lat=${payload.latitude}, Lng=${payload.longitude}, Battery=${payload.battery}, " +
+                "FixType=${payload.fixType}, Health=${payload.health}, " +
+                "HAcc=${payload.horizontalAccuracy}, VAcc=${payload.verticalAccuracy}, " +
+                "Satellites=${payload.satellites}, ReceiverBattery=${payload.receiverBattery}, " +
+                "ReceiverHealth=${payload.receiverHealth}, PDOP=${payload.pdop}, " +
+                "HDOP=${payload.hdop}, VDOP=${payload.vdop}")
 
         val body = jsonString.toRequestBody("application/json".toMediaType())
 

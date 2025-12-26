@@ -173,15 +173,29 @@ class TmmRelayService : Service() {
                         .toMinutes() >= 5
 
             if (shouldSendPost) {
+                android.util.Log.i("TmmRelayService", "=== Sending POST request with full payload ===")
+                android.util.Log.i("TmmRelayService", "Payload: TenantId=${payload.tenantId}, " +
+                        "DeviceId=$deviceId, Lat=${payload.latitude}, Lng=${payload.longitude}, " +
+                        "Battery=${payload.battery}, FixType=${payload.fixType}, " +
+                        "Health=${payload.health}, HAcc=${payload.horizontalAccuracy}, " +
+                        "VAcc=${payload.verticalAccuracy}, Satellites=${payload.satellites}, " +
+                        "ReceiverBattery=${payload.receiverBattery}, ReceiverHealth=${payload.receiverHealth}")
+                
                 ApiClient.send(
                     payload.copy(deviceId = deviceId),
                     apiKey
                 ) { timestamp, payloadInfo, success ->
+                    android.util.Log.i("TmmRelayService", "POST response: $timestamp - $payloadInfo (success=$success)")
                     if (success) lastSuccessfulPostAt = Instant.now()
                     updateNotificationWithPost(timestamp, payloadInfo)
                     updateDynamicStatus()
                 }
-                    }
+            } else {
+                val minutesSinceLastPost = lastSuccessfulPostAt?.let {
+                    java.time.Duration.between(it, Instant.now()).toMinutes()
+                } ?: 0
+                android.util.Log.d("TmmRelayService", "Skipping POST (last post was $minutesSinceLastPost minutes ago, need 5 minutes)")
+            }
                 } catch (e: Exception) {
                     android.util.Log.e("TmmRelayService", "Error in payloadHandler: ${e.message}", e)
             }
