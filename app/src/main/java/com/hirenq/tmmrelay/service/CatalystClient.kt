@@ -254,103 +254,118 @@ class CatalystClient(
                     return@Thread
                 }
                 
-                Log.i(TAG, "Step 4: Force activation - Calling login")
+                Log.i(TAG, "Step 4: Force activation - Opening TMM login screen")
                 // THE FIX: Force activation inside YOUR app
-                // Try to call CatalystFacade.login(context) before loadSubscription()
+                // Per demo (MainActivity.java line 130-135): Launch TMM login Intent
                 // This opens the Trimble login UI
                 // User must log in with the same Trimble ID that owns the Catalyst subscription
+                // CRITICAL: We must wait for login to complete before loading subscription
                 try {
-                    Log.i(TAG, "Attempting to open Trimble login UI...")
-                    // Try to call login method via reflection (may not exist in all SDK versions)
-                    try {
-                        val loginMethod = CatalystFacade::class.java.getMethod("login", Context::class.java)
-                        loginMethod.invoke(null, context)
-                        Log.i(TAG, "✓ Trimble login UI opened via CatalystFacade.login()")
-                    } catch (e: NoSuchMethodException) {
-                        // Method doesn't exist - try launching TMM login Intent instead
-                        Log.i(TAG, "CatalystFacade.login() not available, trying TMM Intent...")
-                        val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
-                            putExtra("applicationID", appGuid)
-                            putExtra("receiverName", "Catalyst") // Default receiver name
-                            putExtra("noInstall", false)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(loginIntent)
-                        Log.i(TAG, "✓ Trimble login UI opened via TMM Intent")
+                    Log.i(TAG, "Launching TMM login Intent...")
+                    // Per demo: Intent action is "com.trimble.tmm.LOGIN"
+                    // Must launch from main thread - use Handler
+                    val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
+                        putExtra("applicationID", appGuid)
+                        putExtra("receiverName", "Catalyst") // Default receiver name
+                        putExtra("noInstall", false) // Per demo: !isCatalystDA1Selected(), we use false for Catalyst
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     }
-                    Log.i(TAG, "User should log in with Trimble ID that owns the Catalyst subscription")
-                    Log.i(TAG, "Note: Login happens in background - proceeding with subscription load")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Login UI not available or failed: ${e.message}")
-                    Log.w(TAG, "Continuing with subscription load - user may need to login manually in TMM")
-                }
-                
-                Log.i(TAG, "Step 5: Loading subscription")
-                // Per demo (MainModel.java line 491-522): loadSubscription(String userTID)
-                // Demo flow:
-                // 1. If userTID is null, return error (line 492-502)
-                // 2. If usedSubscriptionType == SubscriptionTypes.User, call loadSubscriptionFromTrimbleMobileManager(userTID) (line 508)
-                // 3. Otherwise call loadSubscription() (line 521)
-                // Since subscription is ACTIVE in TMM, we use User subscription type
-                // Per demo (MainActivity.java line 287): userTID comes from TMM login result as "accountTID"
-                // Since we're in a service, try to get accountTID from TMM's shared preferences
-                val userTID: String? = try {
-                    // Try to get accountTID from TMM's shared preferences
-                    val tmmPrefs = context.getSharedPreferences("com.trimble.tmm_preferences", Context.MODE_PRIVATE)
-                    val accountTID = tmmPrefs.getString("accountTID", null) 
-                        ?: tmmPrefs.getString("userTID", null)
-                        ?: tmmPrefs.getString("account_id", null)
-                        ?: tmmPrefs.getString("user_id", null)
                     
-                    if (accountTID != null && accountTID.isNotEmpty()) {
-                        Log.i(TAG, "Found accountTID from TMM preferences: $accountTID")
-                        accountTID
-                    } else {
-                        Log.w(TAG, "Could not find accountTID in TMM preferences")
-                        null
+                    // Launch Intent on main thread (required for Activity start)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        try {
+                            context.startActivity(loginIntent)
+                            Log.i(TAG, "✓ TMM login Intent launched successfully")
+                            Log.i(TAG, "User should log in with Trimble ID that owns the Catalyst subscription")
+                        } catch (e: android.content.ActivityNotFoundException) {
+                            Log.e(TAG, "TMM login Activity not found - TMM may not be installed")
+                            Log.e(TAG, "Please install Trimble Mobile Manager (TMM) to use subscription login")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to launch TMM login Intent: ${e.message}", e)
+                        }
                     }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not access TMM preferences: ${e.message}")
-                    null
-                }
-                
-                // Per demo (MainModel.java line 492): if userTID is null, return error
-                if (userTID == null) {
-                    Log.e(TAG, "userTID is null - cannot load subscription from TMM")
-                    Log.e(TAG, "Subscription loading failed: userTID required for TMM subscription")
-                    currentError = "NO_SUBSCRIPTION"
-                    onError(RuntimeException("Loading Subscription Failed: userTID is null"))
-                    return@Thread
-                }
-                
-                // Per demo (MainModel.java line 507-508): Use loadSubscriptionFromTrimbleMobileManager for User subscription type
-                val loadRc = try {
-                    Log.i(TAG, "Loading subscription from TMM with userTID: $userTID")
-                    facade!!.loadSubscriptionFromTrimbleMobileManager(userTID)
-                } catch (e: NoSuchMethodException) {
-                    // Method doesn't exist - fall back to standard method
-                    Log.w(TAG, "loadSubscriptionFromTrimbleMobileManager not available, trying standard method...")
-                    facade!!.loadSubscription()
-                } catch (e: Exception) {
-                    Log.e(TAG, "CRITICAL: Exception during loadSubscriptionFromTrimbleMobileManager: ${e.message}", e)
-                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                    e.printStackTrace()
-                    // Try standard method as fallback
-                    try {
-                        Log.i(TAG, "Trying fallback: standard loadSubscription()...")
-                        facade!!.loadSubscription()
-                    } catch (e2: Exception) {
-                        Log.e(TAG, "Both subscription load methods failed", e2)
+                    
+                    // Wait for login to complete - poll TMM preferences for accountTID
+                    Log.i(TAG, "Waiting for user to complete login...")
+                    Log.i(TAG, "Polling TMM preferences for accountTID (max 60 seconds)...")
+                    
+                    var userTID: String? = null
+                    val maxWaitTime = 60000L // 60 seconds
+                    val pollInterval = 1000L // Check every 1 second
+                    val startTime = System.currentTimeMillis()
+                    
+                    while (userTID == null && (System.currentTimeMillis() - startTime) < maxWaitTime) {
+                        Thread.sleep(pollInterval)
+                        
+                        try {
+                            val tmmPrefs = context.getSharedPreferences("com.trimble.tmm_preferences", Context.MODE_PRIVATE)
+                            val accountTID = tmmPrefs.getString("accountTID", null) 
+                                ?: tmmPrefs.getString("userTID", null)
+                                ?: tmmPrefs.getString("account_id", null)
+                                ?: tmmPrefs.getString("user_id", null)
+                            
+                            if (accountTID != null && accountTID.isNotEmpty()) {
+                                userTID = accountTID
+                                Log.i(TAG, "✓ Login detected! Found accountTID: $accountTID")
+                                break
+                            }
+                        } catch (e: Exception) {
+                            Log.d(TAG, "Error checking TMM preferences: ${e.message}")
+                        }
+                        
+                        val elapsed = (System.currentTimeMillis() - startTime) / 1000
+                        if (elapsed % 5 == 0L) {
+                            Log.d(TAG, "Still waiting for login... (${elapsed}s elapsed)")
+                        }
+                    }
+                    
+                    if (userTID == null) {
+                        Log.e(TAG, "Login timeout - userTID not found after 60 seconds")
+                        Log.e(TAG, "Subscription loading failed: userTID required for TMM subscription")
+                        Log.e(TAG, "Please ensure you are logged in to TMM and try again")
                         currentError = "NO_SUBSCRIPTION"
-                        onError(e2)
+                        onError(RuntimeException("Loading Subscription Failed: Login timeout - userTID not found"))
                         return@Thread
                     }
-                }
-                
-                Log.i(TAG, "Load subscription return code: ${loadRc.code}")
-                Log.i(TAG, "Return code details: ${loadRc.code.toString()}")
-                
-                if (loadRc.code != DriverReturnCode.Success) {
+                    
+                    Log.i(TAG, "Step 5: Loading subscription")
+                    // Per demo (MainModel.java line 491-522): loadSubscription(String userTID)
+                    // Demo flow:
+                    // 1. If userTID is null, return error (line 492-502) - already checked above
+                    // 2. If usedSubscriptionType == SubscriptionTypes.User, call loadSubscriptionFromTrimbleMobileManager(userTID) (line 508)
+                    // 3. Otherwise call loadSubscription() (line 521)
+                    // Since subscription is ACTIVE in TMM, we use User subscription type
+                    // userTID is now available from successful login
+                    
+                    // Per demo (MainModel.java line 507-508): Use loadSubscriptionFromTrimbleMobileManager for User subscription type
+                    val loadRc = try {
+                        Log.i(TAG, "Loading subscription from TMM with userTID: $userTID")
+                        facade!!.loadSubscriptionFromTrimbleMobileManager(userTID)
+                    } catch (e: NoSuchMethodException) {
+                        // Method doesn't exist - fall back to standard method
+                        Log.w(TAG, "loadSubscriptionFromTrimbleMobileManager not available, trying standard method...")
+                        facade!!.loadSubscription()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "CRITICAL: Exception during loadSubscriptionFromTrimbleMobileManager: ${e.message}", e)
+                        Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                        e.printStackTrace()
+                        // Try standard method as fallback
+                        try {
+                            Log.i(TAG, "Trying fallback: standard loadSubscription()...")
+                            facade!!.loadSubscription()
+                        } catch (e2: Exception) {
+                            Log.e(TAG, "Both subscription load methods failed", e2)
+                            currentError = "NO_SUBSCRIPTION"
+                            onError(e2)
+                            return@Thread
+                        }
+                    }
+                    
+                    Log.i(TAG, "Load subscription return code: ${loadRc.code}")
+                    Log.i(TAG, "Return code details: ${loadRc.code.toString()}")
+                    
+                    if (loadRc.code != DriverReturnCode.Success) {
                     // Map return code to specific error - check enum values safely
                     val codeStr = loadRc.code.toString()
                     currentError = try {
@@ -376,13 +391,13 @@ class CatalystClient(
                     Log.e(TAG, "  2. Trimble Mobile Manager (TMM) is not installed or not running")
                     Log.e(TAG, "  3. Subscription file is missing or invalid")
                     Log.e(TAG, "  4. License has expired")
-                    onError(error)
-                    return@Thread
-                }
-                currentError = null // Clear error on success
-                Log.i(TAG, "✓ Subscription loaded successfully")
-                
-                Log.i(TAG, "Step 6: Verifying subscription programmatically")
+                        onError(error)
+                        return@Thread
+                    }
+                    currentError = null // Clear error on success
+                    Log.i(TAG, "✓ Subscription loaded successfully")
+                    
+                    Log.i(TAG, "Step 6: Verifying subscription programmatically")
                 // Verify subscription immediately after loadSubscription()
                 // Should see: Active, Valid, Non-expired
                 try {
