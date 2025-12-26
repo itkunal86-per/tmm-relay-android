@@ -1,0 +1,43 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 36
+    namespace "trimble.jssi.android.catalystfacade.catalystfacadedemo"
+
+    defaultConfig {
+        applicationId "trimble.jssi.android.catalystfacade.catalystfacadedemo"
+        minSdkVersion 21
+        targetSdkVersion 36
+        multiDexEnabled true
+    }
+
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: '../SSI/libs', include: ['*.aar'], exclude: [])
+    implementation project(path: ':CatalystFacade')
+    runtimeOnly 'com.google.protobuf:protobuf-java:3.24.4'
+    implementation 'androidx.core:core:1.15.0'
+    implementation 'androidx.multidex:multidex:2.0.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.20") {
+        exclude group: "org.jetbrains.kotlin", module: "kotlin-stdlib-jdk8"
+    }
+}

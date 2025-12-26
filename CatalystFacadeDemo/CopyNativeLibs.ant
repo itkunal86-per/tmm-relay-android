@@ -1,0 +1,44 @@
+<project name="CopyNativeLibs" default="pre-build" basedir=".">
+	<!-- set global properties for this build -->
+
+	<target name="pre-build" description="Copying Native Libs">
+		<copy todir="../CatalystFacadeDemo/libs/" overwrite="true">
+			<fileset dir="../External/TrimbleGeodeticLibrary/ITRFTransformer/libs/">
+				<include name="*/*.so"/>
+			</fileset>
+			<fileset dir="../Trimble.Ssi.Wrapped/Common/libs/">
+				<include name="**/*.so"/>
+			</fileset>
+			<fileset dir="../Trimble.Ssi.Wrapped/GNSS/libs/">
+				<include name="**/*Trimble.Ssi.Wrapped.GNSS.so"/>
+			</fileset>
+			<fileset dir="../Trimble.Ssi.Driver/CarpoBased/Driver/RSeries/libs/">
+				<include name="**/*Trimble.Ssi.Driver.CarpoBased.Driver.RSeries.so"/>
+			</fileset>
+			<fileset dir="../Trimble.Ssi.Driver/CarpoBased/GNSS/libs/">
+				<include name="**/*Trimble.Ssi.Driver.CarpoBased.GNSS.so"/>
+			</fileset>
+			<fileset dir="../Trimble.Ssi.Driver/CarpoBased/Common/libs/">
+				<include name="**/*Trimble.Ssi.Driver.CarpoBased.Common.so"/>
+			</fileset>
+			<fileset dir="../Trimble.Ssi.Driver/DriverCommon/GNSS/libs/">
+				<include name="**/*Trimble.Ssi.Driver.DriverCommon.GNSS.so"/>
+			</fileset>
+			<fileset dir="../Trimble.Ssi.Driver/DriverCommon/Common/libs/">
+				<include name="**/*Trimble.Ssi.Driver.DriverCommon.Common.so"/>
+			</fileset>
+			<fileset dir="../Trimble.Ssi.Interfaces/GNSS/libs/">
+				<include name="**/*Trimble.Ssi.Interfaces.GNSS.so"/>
+			</fileset>
+			<fileset dir="../Trimble.Ssi.Interfaces/Common/libs/">
+				<include name="**/*Trimble.Ssi.Interfaces.Common.so"/>
+			</fileset>
+
+			<fileset dir="../Carpo/Lib/Android/">
+				<exclude name="arm-none-eabi/**"/>
+				<include name="**/libDRV_TrimCom.so"/>
+				<include name="**/libDRV_TrimbleCommon.so"/>
+			</fileset>
+		</copy>
+	</target>
+</project>

@@ -1,0 +1,869 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:fitsSystemWindows="true"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+
+    <android.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:title="@string/ApplicationName"
+        android:layout_width="match_parent"
+        android:layout_height="?android:attr/actionBarSize"
+        android:background="?android:attr/colorPrimary"
+        android:theme="@android:style/ThemeOverlay.Material.Dark.ActionBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:ignore="MissingConstraints" >
+    </android.widget.Toolbar>
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@id/toolbar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:id="@+id/subscriptionLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#C0C0C0"
+                android:orientation="horizontal"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <TextView
+                    android:id="@+id/txtSubscription"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:paddingEnd="@dimen/padding_right"
+                    android:paddingStart="@dimen/padding_right"
+                    android:text="@string/Subscription"
+                    android:textAppearance="?android:attr/textAppearanceMedium"/>
+
+                <LinearLayout
+                    android:id="@+id/layoutLicStatus"
+                    android:layout_width="fill_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/roundedrectgrey"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/txtLicStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:text="@string/Status"
+                        android:textAppearance="?android:attr/textAppearanceSmall"
+                        android:textColor="#000000" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/subscriptionButtonLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                app:layout_constraintTop_toBottomOf="@id/subscriptionLayout"
+                app:layout_constraintStart_toStartOf="parent">
+
+                <Button
+                    android:id="@+id/btnLoadSubscription"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/LoadSubscription"
+                    style="@style/facadeButtonStyle"/>
+
+                <Button
+                    android:id="@+id/btnCheckOnDemand"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/CheckOnDemand"
+                    style="@style/facadeButtonStyle"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/sensorLayout"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:background="#C0C0C0"
+                android:orientation="horizontal"
+                app:layout_constraintTop_toBottomOf="@id/subscriptionButtonLayout"
+                app:layout_constraintStart_toStartOf="parent">
+
+                <TextView
+                    android:id="@+id/txtSensor"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:paddingEnd="5dp"
+                    android:paddingStart="5dp"
+                    android:text="@string/Sensor"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+
+                <LinearLayout
+                    android:id="@+id/layoutSensorStatus"
+                    android:layout_width="fill_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/roundedrectgrey"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/txtSensorStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="@string/Status"
+                        android:textAppearance="?android:attr/textAppearanceSmall"
+                        android:textColor="#000000" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/sensorConnectLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:orientation="horizontal"
+                app:layout_constraintTop_toBottomOf="@id/sensorLayout"
+                app:layout_constraintStart_toStartOf="parent"
+                android:weightSum="5">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_weight="3"
+                    android:weightSum="2">
+                    <Button
+                        android:id="@+id/btnConnect"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/Connect"
+                        android:layout_weight="1"
+                        style="@style/facadeButtonStyle"
+                        tools:ignore="NestedWeights" />
+
+                    <Button
+                        android:id="@+id/btnDisconnect"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/Disconnect"
+                        android:layout_weight="1"
+                        style="@style/facadeButtonStyle"/>
+                </LinearLayout>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_weight="2"
+                    android:layout_marginStart="@dimen/padding_top"
+                    android:layout_marginTop="@dimen/padding_top"
+                    android:weightSum="3">
+                    <ImageView
+                        android:id="@+id/imgBatteryLevel"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="end"
+                        android:layout_weight="1"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/battery_icon"
+                        tools:ignore="NestedWeights" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:layout_weight="2"
+                        android:gravity="center"
+                        android:id="@+id/txtExternalReceiverBatteryLevelValue"
+                        android:background="@drawable/textview_border"/>
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/surveyLayout"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:background="#C0C0C0"
+                android:orientation="horizontal"
+                app:layout_constraintTop_toBottomOf="@id/sensorConnectLayout"
+                app:layout_constraintStart_toStartOf="parent">
+
+                <TextView
+                    android:id="@+id/txtSurvey"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:paddingEnd="@dimen/padding_right"
+                    android:paddingStart="@dimen/padding_right"
+                    android:text="@string/Survey"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+
+                <LinearLayout
+                    android:id="@+id/layoutSurveyStatus"
+                    android:layout_width="fill_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/roundedrectgrey"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/txtSurveyStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="@string/Status"
+                        android:textAppearance="?android:attr/textAppearanceSmall"
+                        android:textColor="#000000" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/surveyButtonLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:orientation="horizontal"
+                app:layout_constraintTop_toBottomOf="@id/surveyLayout"
+                app:layout_constraintStart_toStartOf="parent"
+                android:weightSum="5">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_weight="3">
+
+                    <Button
+                        android:id="@+id/btnChangeCorrectionSourceSettings"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/ChangeCorrectionSourceSettings"
+                        android:textSize="12sp"
+                        style="@style/facadeButtonStyle"/>
+
+                    <Button
+                        android:id="@+id/btnGetNtripSourceList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/GetNtripSourceList"
+                        style="@style/facadeButtonStyle"/>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:weightSum="2">
+
+                        <Button
+                            android:id="@+id/btnStartSurvey"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/StartSurvey"
+                            android:layout_weight="1"
+                            style="@style/facadeButtonStyle"/>
+
+                        <Button
+                            android:id="@+id/btnEndSurvey"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/EndSurvey"
+                            android:layout_weight="1"
+                            style="@style/facadeButtonStyle"/>
+                    </LinearLayout>
+                </LinearLayout>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_weight="2">
+                    <TextView
+                        android:id="@+id/lblRtkSurveyType"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="start"
+                        android:paddingLeft="5dp"
+                        android:paddingRight="5dp"
+                        android:paddingTop="5dp"
+                        android:textSize="12sp"
+                        android:text="@string/SurveyType" />
+                    <TextView
+                        android:id="@+id/txtRtkSurveyTypeValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="start"
+                        android:paddingLeft="5dp"
+                        android:paddingRight="5dp"
+                        android:text=""
+                        android:textSize="12sp"
+                        android:background="@drawable/textview_border"/>
+                    <TextView
+                        android:id="@+id/lblRtkConnectionStatusV"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:paddingLeft="5dp"
+                        android:paddingRight="5dp"
+                        android:paddingTop="5dp"
+                        android:textSize="12sp"
+                        android:text="@string/RtkConnectionStatus" />
+                    <TextView
+                        android:id="@+id/txtRtkConnectionStatusValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:paddingLeft="5dp"
+                        android:paddingRight="5dp"
+                        android:text=""
+                        android:textSize="12sp"
+                        android:background="@drawable/textview_border"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/positionLayout"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:background="#C0C0C0"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                app:layout_constraintTop_toBottomOf="@id/surveyButtonLayout"
+                app:layout_constraintStart_toStartOf="parent">
+
+                <TextView
+                    android:id="@+id/txtPosition"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingEnd="@dimen/padding_right"
+                    android:paddingStart="@dimen/padding_right"
+                    android:text="@string/Position"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/staticSwitchLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:orientation="horizontal"
+                app:layout_constraintTop_toBottomOf="@id/positionLayout"
+                app:layout_constraintStart_toStartOf="parent"
+                android:weightSum="5">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    app:layout_constraintTop_toBottomOf="@id/positionLayout"
+                    app:layout_constraintStart_toStartOf="parent"
+                    android:layout_weight="3">
+                    <Button
+                        android:id="@+id/btnMarkPoints"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/MarkPoints"
+                        android:layout_weight="2"
+                        style="@style/facadeButtonStyle"
+                        tools:ignore="NestedWeights" />
+
+                    <Button
+                        android:id="@+id/btnClearMarking"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="2"
+                        android:text="@string/ClearMarking"
+                        style="@style/facadeButtonStyle"/>
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/staticTestLayout"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_weight="2"
+                    android:layout_marginTop="@dimen/padding_right"
+                    android:layout_marginStart="@dimen/padding_right">
+                    <TextView
+                        android:id="@+id/txtMarker"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?android:attr/textAppearanceSmall"
+                        android:textSize="12sp"
+                        android:background="@drawable/textview_border"/>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchGoStatic"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/GoStatic"
+                        tools:ignore="TouchTargetSizeCheck"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/satellitesCountLayout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:baselineAligned="false"
+                android:orientation="horizontal"
+                app:layout_constraintTop_toBottomOf="@id/staticSwitchLayout"
+                app:layout_constraintStart_toStartOf="parent"
+                android:weightSum="8">
+
+                <LinearLayout
+                    android:id="@+id/lstSatellites"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:minWidth="@dimen/minimum_width_satellites_view"
+                    android:fillViewport="true"
+                    android:layout_weight="2">
+
+                    <TableLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:stretchColumns="2"
+                        tools:ignore="UselessParent">
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent">
+                            <TextView
+                                android:layout_span="2"
+                                android:padding="3dip"
+                                android:text="@string/SatelliteSummary"
+                                android:textAppearance="?android:attr/textAppearanceMedium"
+                                android:textStyle="bold" />
+                        </TableRow>
+
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent">
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/SatelliteType" />
+                            <TextView
+                                android:id="@+id/txtSummary"
+                                android:gravity="start"
+                                android:padding="3dip"
+                                android:text="@string/SummaryTitle" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/GPS" />
+                            <TextView
+                                android:id="@+id/txtGpsSummary"
+                                android:gravity="start"
+                                android:padding="3dip"
+                                android:text="@string/SatelliteDefSummary" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/GLONASS" />
+                            <TextView
+                                android:id="@+id/txtGlonassSummary"
+                                android:gravity="start"
+                                android:padding="3dip"
+                                android:text="@string/SatelliteDefSummary" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/BEIDOU" />
+                            <TextView
+                                android:id="@+id/txtBeidouSummary"
+                                android:gravity="start"
+                                android:padding="3dip"
+                                android:text="@string/SatelliteDefSummary" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/GALILEO" />
+                            <TextView
+                                android:id="@+id/txtGalileoSummary"
+                                android:gravity="start"
+                                android:padding="3dip"
+                                android:text="@string/SatelliteDefSummary" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/SBAS" />
+                            <TextView
+                                android:id="@+id/txtSbasSummary"
+                                android:gravity="start"
+                                android:padding="3dip"
+                                android:text="@string/SatelliteDefSummary" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/QZSS" />
+                            <TextView
+                                android:id="@+id/txtQzssSummary"
+                                android:gravity="start"
+                                android:padding="3dip"
+                                android:text="@string/SatelliteDefSummary" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/IRNSS" />
+                            <TextView
+                                android:id="@+id/txtIrnssSummary"
+                                android:gravity="start"
+                                android:padding="3dip"
+                                android:text="@string/SatelliteDefSummary" />
+                        </TableRow>
+
+                    </TableLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/lstPosition"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:fillViewport="true"
+                    android:layout_marginStart="@dimen/padding_right"
+                    android:layout_weight="6">
+
+                    <TableLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:stretchColumns="2">
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/SolutionType" />
+
+                            <TextView
+                                android:id="@+id/txtSolutionType"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/Latitude" />
+                            <TextView
+                                android:id="@+id/txtLatitude"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/Longitude" />
+                            <TextView
+                                android:id="@+id/txtLongitude"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/Height" />
+                            <TextView
+                                android:id="@+id/txtHeight"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/GroundPositionType" />
+                            <TextView
+                                android:id="@+id/txtGroundPositionType"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/HPrecision" />
+                            <TextView
+                                android:id="@+id/txtHPrecision"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/VPrecision" />
+                            <TextView
+                                android:id="@+id/txtVPrecision"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/SigmaSemiMajorAxis" />
+                            <TextView
+                                android:id="@+id/txtSigmaSemiMajorAxis"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/SigmaSemiMinorAxis" />
+                            <TextView
+                                android:id="@+id/txtSigmaSemiMinorAxis"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/SigmaOrientation" />
+                            <TextView
+                                android:id="@+id/txtSigmaOrientation"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/ImuState" />
+                            <TextView
+                                android:id="@+id/txtImuState"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/Pitch" />
+                            <TextView
+                                android:id="@+id/txtPitch"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/Roll" />
+                            <TextView
+                                android:id="@+id/txtRoll"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/Yaw" />
+                            <TextView
+                                android:id="@+id/txtYaw"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/PitchPrecision" />
+                            <TextView
+                                android:id="@+id/txtPitchPrecision"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/RollPrecision" />
+                            <TextView
+                                android:id="@+id/txtRollPrecision"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/YawPrecision" />
+                            <TextView
+                                android:id="@+id/txtYawPrecision"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/NoOfSatellites" />
+                            <TextView
+                                android:id="@+id/txtNoOfSatellites"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/StaticEpoch" />
+                            <TextView
+                                android:id="@+id/txtStaticEpoch"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/CorrectionAge" />
+                            <TextView
+                                android:id="@+id/txtCorrectionAge"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/ReceivedCorrectionData" />
+                            <TextView
+                                android:id="@+id/txtReceivedCorrectionData"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/StationID" />
+                            <TextView
+                                android:id="@+id/txtStationID"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/IsTransformed" />
+                            <TextView
+                                android:id="@+id/txtIsTransformed"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/SourceReferenceFrameID" />
+                            <TextView
+                                android:id="@+id/txtSourceReferenceFrameID"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/SourceEpoch" />
+                            <TextView
+                                android:id="@+id/txtSourceEpoch"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/OutputReferenceFrameID" />
+                            <TextView
+                                android:id="@+id/txtReferenceFrameID"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/OutputEpoch" />
+                            <TextView
+                                android:id="@+id/txtEpoch"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/elevation" />
+
+                            <TextView
+                                android:id="@+id/txtElevation"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/geoidmodel" />
+                            <TextView
+                                android:id="@+id/txtGeoidModel"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/gps_time" />
+                            <TextView
+                                android:id="@+id/txtGpsTime"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+
+                        <TableRow>
+                            <TextView
+                                android:padding="3dip"
+                                android:text="@string/utc_time" />
+                            <TextView
+                                android:id="@+id/txtUtcTime"
+                                android:gravity="start"
+                                android:padding="3dip" />
+                        </TableRow>
+                    </TableLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

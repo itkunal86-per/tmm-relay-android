@@ -1,0 +1,47 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fitsSystemWindows="true"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    >
+
+    <TextView
+        android:id="@+id/textViewBTSelect"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentTop="true"
+        android:padding="5dp"
+        android:textIsSelectable="true"
+        android:textAppearance="?android:attr/textAppearanceLarge" />
+
+    <ListView
+        android:id="@+id/listViewBTSelect"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/btnBTPaired"
+        android:layout_alignParentLeft="true"
+        android:dividerHeight="1dp"
+        android:layout_below="@+id/textViewBTSelect" >
+    </ListView>
+    <Button
+        android:id="@+id/btnBTPaired"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/toggleButtonBTSelect"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentRight="true"
+        android:text="@string/btnBTPaired"
+     />
+    <ToggleButton
+        android:id="@+id/toggleButtonBTSelect"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentRight="true"
+        android:text="@string/ButtonBtselectScan"
+        android:textOff="@string/ButtonBtselectScan"
+        android:textOn="@string/ButtonBtselectScan" />
+
+</RelativeLayout>
