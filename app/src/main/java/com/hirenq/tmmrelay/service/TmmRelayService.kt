@@ -134,6 +134,10 @@ class TmmRelayService : Service() {
     override fun onCreate() {
         super.onCreate()
         
+        // Get device ID early so it's available throughout onCreate
+        val deviceId = DeviceInfoUtil.deviceId(this)
+        android.util.Log.i("TmmRelayService", "Device ID = $deviceId")
+        
         try {
             android.util.Log.i("TmmRelayService", "=== Service onCreate() started ===")
             
@@ -141,9 +145,6 @@ class TmmRelayService : Service() {
             android.util.Log.i("TmmRelayService", "Step 1: Initializing Trimble Licensing")
             TrimbleLicensingUtil.initialize(this)
             android.util.Log.i("TmmRelayService", "Step 1: Trimble Licensing initialized")
-            
-            val deviceId = DeviceInfoUtil.deviceId(this)
-            android.util.Log.i("TmmRelayService", "Step 2: Device ID = $deviceId")
 
             // Common handler for processing payloads from Catalyst client
             val payloadHandler: (TelemetryPayload) -> Unit = { payload ->
