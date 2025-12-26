@@ -41,6 +41,10 @@ signingConfigs {
                 "proguard-rules.pro"
             )
         }
+        
+        debug {
+            isMinifyEnabled = false
+        }
     }
 
     compileOptions {
@@ -93,6 +97,10 @@ dependencies {
     // JSON
     implementation("com.google.code.gson:gson:2.11.0")
 
+    // Protocol Buffers - Required for Trimble SDK (BlueBottle classes)
+    implementation("com.google.protobuf:protobuf-java:3.25.1")
+    implementation("com.google.protobuf:protobuf-java-util:3.25.1")
+
     // Coroutines (background work)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
@@ -105,12 +113,23 @@ dependencies {
     // - trimble.jssi.core-release: Core JSSI library (used by CatalystFacade)
     // - trimble.jssi.android.communicators-release: Android communicators for JSSI (used by CatalystFacade)
     // - JTDDTransformation-release: Coordinate transformation library (available via CoordinateTransformUtil)
-    // - empowerlib-1.2.0.26: Empower library for additional Trimble functionality
-    implementation(mapOf("name" to "empowerlib-1.2.0.26", "ext" to "aar"))
-    implementation(mapOf("name" to "JTDDTransformation-release", "ext" to "aar"))
-    implementation(mapOf("name" to "trimble.jssi.android.communicators-release", "ext" to "aar"))
-    implementation(mapOf("name" to "trimble.jssi.core-release", "ext" to "aar"))
-    implementation(mapOf("name" to "Trimble.Licensing.Android", "ext" to "aar"))
+    // - empowerlib-1.2.0.26: Empower library for additional Trimble functionality (may contain BlueBottle classes)
+    // Note: AAR files are included with transitive dependencies to ensure all required classes are available
+    implementation(mapOf("name" to "empowerlib-1.2.0.26", "ext" to "aar")) {
+        isTransitive = true
+    }
+    implementation(mapOf("name" to "JTDDTransformation-release", "ext" to "aar")) {
+        isTransitive = true
+    }
+    implementation(mapOf("name" to "trimble.jssi.android.communicators-release", "ext" to "aar")) {
+        isTransitive = true
+    }
+    implementation(mapOf("name" to "trimble.jssi.core-release", "ext" to "aar")) {
+        isTransitive = true
+    }
+    implementation(mapOf("name" to "Trimble.Licensing.Android", "ext" to "aar")) {
+        isTransitive = true
+    }
 
     // Testing
    testImplementation("junit:junit:4.13.2")
