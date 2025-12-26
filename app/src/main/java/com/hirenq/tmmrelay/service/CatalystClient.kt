@@ -226,8 +226,8 @@ class CatalystClient(
                 }
                 
                 Log.i(TAG, "Step 2: Getting app GUID")
-                // Use the same AppGuid as CatalystFacadeDemo for compatibility with Trimble Mobile Manager
-                val appGuid = "5b25ac4a-0d41-4107-983c-77b6da298a8d"
+                // Get app GUID from application ID
+                val appGuid = context.packageName
                 Log.d(TAG, "Using app GUID: $appGuid")
                 
                 Log.i(TAG, "Step 3: Creating CatalystFacade instance")
@@ -253,28 +253,28 @@ class CatalystClient(
                     return@Thread
                 }
                 
-                Log.i(TAG, "Step 4: Loading subscription")
-                // Try to load subscription from Trimble Mobile Manager first (if TMM is installed)
-                // Per demo (MainModel.java line 508): loadSubscriptionFromTrimbleMobileManager(userTID)
-                // In demo, userTID comes from TMM login activity result
-                // For automatic connection, try with empty string - TMM may use logged-in user
-                // Fall back to loadSubscription() if TMM method is not available or fails
+                Log.i(TAG, "Step 4: Force activation - Calling login")
+                // THE FIX: Force activation inside YOUR app
+                // Call CatalystFacade.login(context) before loadSubscription()
+                // This opens the Trimble login UI
+                // User must log in with the same Trimble ID that owns the Catalyst subscription
+                try {
+                    Log.i(TAG, "Opening Trimble login UI...")
+                    CatalystFacade.login(context)
+                    Log.i(TAG, "✓ Trimble login UI opened - user should log in with Trimble ID")
+                    Log.i(TAG, "Waiting for user to complete login...")
+                    // Note: login() is synchronous and will show UI, wait for user action
+                    // After login succeeds, proceed to loadSubscription
+                } catch (e: Exception) {
+                    Log.w(TAG, "Login method not available or failed: ${e.message}")
+                    Log.w(TAG, "Continuing with subscription load - may need manual login in TMM")
+                }
+                
+                Log.i(TAG, "Step 5: Loading subscription")
+                // After login succeeds, load subscription
+                // Watch logcat for: "Subscription loaded: SUCCESS"
                 val loadRc = try {
-                    // First, try loading from Trimble Mobile Manager (requires userTID String parameter)
-                    try {
-                        Log.i(TAG, "Attempting to load subscription from Trimble Mobile Manager...")
-                        // Try with empty string - if TMM is installed and user is logged in, it should work
-                        // If not, it will fail and we'll fall back to standard method
-                        facade!!.loadSubscriptionFromTrimbleMobileManager("")
-                    } catch (e: NoSuchMethodException) {
-                        // Method doesn't exist, try standard loadSubscription
-                        Log.i(TAG, "TMM method not available, trying standard loadSubscription()...")
-                        facade!!.loadSubscription()
-                    } catch (e: Exception) {
-                        // If TMM method fails, try standard loadSubscription
-                        Log.w(TAG, "TMM subscription load failed: ${e.message}, trying standard method...")
-                        facade!!.loadSubscription()
-                    }
+                    facade!!.loadSubscription()
                 } catch (e: Exception) {
                     Log.e(TAG, "CRITICAL: Exception during loadSubscription: ${e.message}", e)
                     Log.e(TAG, "Exception type: ${e.javaClass.name}")
@@ -319,7 +319,54 @@ class CatalystClient(
                 currentError = null // Clear error on success
                 Log.i(TAG, "✓ Subscription loaded successfully")
                 
-                Log.i(TAG, "Step 5: Initializing driver")
+                Log.i(TAG, "Step 6: Verifying subscription programmatically")
+                // Verify subscription immediately after loadSubscription()
+                // Should see: Active, Valid, Non-expired
+                try {
+                    // Access subscriptionInfo property (per user instructions: facade.subscriptionInfo)
+                    val subscriptionInfo = try {
+                        // Try direct property access (Kotlin can access Java getters as properties)
+                        @Suppress("UNCHECKED_CAST")
+                        facade!!.javaClass.getDeclaredMethod("getSubscriptionInfo").invoke(facade)
+                    } catch (e: Exception) {
+                        try {
+                            // Try as field
+                            val field = facade!!.javaClass.getDeclaredField("subscriptionInfo")
+                            field.isAccessible = true
+                            field.get(facade)
+                        } catch (e2: Exception) {
+                            Log.d(TAG, "Subscription info not accessible via reflection: ${e2.message}")
+                            null
+                        }
+                    }
+                    
+                    if (subscriptionInfo != null) {
+                        Log.i(TAG, "Subscription = $subscriptionInfo")
+                        // Try to get status properties (isActive, isValid, etc.)
+                        try {
+                            val infoClass = subscriptionInfo.javaClass
+                            val isActive = try { infoClass.getMethod("isActive").invoke(subscriptionInfo) as? Boolean } catch (_: Exception) { null }
+                            val isValid = try { infoClass.getMethod("isValid").invoke(subscriptionInfo) as? Boolean } catch (_: Exception) { null }
+                            val isExpired = try { infoClass.getMethod("isExpired").invoke(subscriptionInfo) as? Boolean } catch (_: Exception) { null }
+                            
+                            Log.i(TAG, "Subscription status: Active=$isActive, Valid=$isValid, Expired=$isExpired")
+                            if (isActive == true && isValid == true && isExpired != true) {
+                                Log.i(TAG, "✓ Subscription is Active, Valid, and Non-expired")
+                            } else {
+                                Log.w(TAG, "⚠ Subscription may not be fully active")
+                            }
+                        } catch (e: Exception) {
+                            Log.d(TAG, "Could not access subscription status properties: ${e.message}")
+                        }
+                    } else {
+                        Log.w(TAG, "Subscription info is null or not accessible")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not get subscription info: ${e.message}")
+                    // Continue anyway - subscription may still be valid
+                }
+                
+                Log.i(TAG, "Step 7: Initializing driver")
                 // Initialize driver for Catalyst
                 val initRc = try {
                     facade!!.initDriver(DriverType.Catalyst)
@@ -355,7 +402,7 @@ class CatalystClient(
                 }
                 currentError = null // Clear error on success
                 
-                Log.i(TAG, "Step 6: Connecting to sensor")
+                Log.i(TAG, "Step 8: Connecting to sensor")
                 // Connect to sensor (this may take time, especially on first connection)
                 // NOTE: Event listener is added AFTER successful connection (per demo pattern)
                 val connectRc = try {
@@ -487,7 +534,7 @@ class CatalystClient(
                 }
                 Log.i(TAG, instrumentInfo)
                 
-                Log.i(TAG, "Step 8: Adding event listener")
+                Log.i(TAG, "Step 9: Adding event listener")
                 // Add event listener AFTER successful connection (per demo pattern - MainModel.java line 635)
                 try {
                     facade!!.addCatalystEventListener(eventListener)
@@ -506,7 +553,7 @@ class CatalystClient(
                     return@Thread
                 }
                 
-                Log.i(TAG, "Step 9: Setting position rate")
+                Log.i(TAG, "Step 10: Setting position rate")
                 // Set position rate to 1Hz (per demo pattern - MainModel.java line 662)
                 val positionRateRc = try {
                     facade!!.setOutputPositionRate(PositionRate.OneHz)
