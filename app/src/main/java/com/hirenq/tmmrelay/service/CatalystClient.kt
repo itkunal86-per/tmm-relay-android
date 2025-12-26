@@ -286,17 +286,65 @@ class CatalystClient(
                 }
                 
                 Log.i(TAG, "Step 5: Loading subscription")
-                // After login succeeds, load subscription
-                // Watch logcat for: "Subscription loaded: SUCCESS"
+                // Per demo (MainModel.java line 491-522): loadSubscription(String userTID)
+                // Demo flow:
+                // 1. If userTID is null, return error (line 492-502)
+                // 2. If usedSubscriptionType == SubscriptionTypes.User, call loadSubscriptionFromTrimbleMobileManager(userTID) (line 508)
+                // 3. Otherwise call loadSubscription() (line 521)
+                // Since subscription is ACTIVE in TMM, we use User subscription type
+                // Per demo (MainActivity.java line 287): userTID comes from TMM login result as "accountTID"
+                // Since we're in a service, try to get accountTID from TMM's shared preferences
+                val userTID: String? = try {
+                    // Try to get accountTID from TMM's shared preferences
+                    val tmmPrefs = context.getSharedPreferences("com.trimble.tmm_preferences", Context.MODE_PRIVATE)
+                    val accountTID = tmmPrefs.getString("accountTID", null) 
+                        ?: tmmPrefs.getString("userTID", null)
+                        ?: tmmPrefs.getString("account_id", null)
+                        ?: tmmPrefs.getString("user_id", null)
+                    
+                    if (accountTID != null && accountTID.isNotEmpty()) {
+                        Log.i(TAG, "Found accountTID from TMM preferences: $accountTID")
+                        accountTID
+                    } else {
+                        Log.w(TAG, "Could not find accountTID in TMM preferences")
+                        null
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not access TMM preferences: ${e.message}")
+                    null
+                }
+                
+                // Per demo (MainModel.java line 492): if userTID is null, return error
+                if (userTID == null) {
+                    Log.e(TAG, "userTID is null - cannot load subscription from TMM")
+                    Log.e(TAG, "Subscription loading failed: userTID required for TMM subscription")
+                    currentError = "NO_SUBSCRIPTION"
+                    onError(RuntimeException("Loading Subscription Failed: userTID is null"))
+                    return@Thread
+                }
+                
+                // Per demo (MainModel.java line 507-508): Use loadSubscriptionFromTrimbleMobileManager for User subscription type
                 val loadRc = try {
+                    Log.i(TAG, "Loading subscription from TMM with userTID: $userTID")
+                    facade!!.loadSubscriptionFromTrimbleMobileManager(userTID)
+                } catch (e: NoSuchMethodException) {
+                    // Method doesn't exist - fall back to standard method
+                    Log.w(TAG, "loadSubscriptionFromTrimbleMobileManager not available, trying standard method...")
                     facade!!.loadSubscription()
                 } catch (e: Exception) {
-                    Log.e(TAG, "CRITICAL: Exception during loadSubscription: ${e.message}", e)
+                    Log.e(TAG, "CRITICAL: Exception during loadSubscriptionFromTrimbleMobileManager: ${e.message}", e)
                     Log.e(TAG, "Exception type: ${e.javaClass.name}")
                     e.printStackTrace()
-                    currentError = "NO_SUBSCRIPTION"
-                    onError(e)
-                    return@Thread
+                    // Try standard method as fallback
+                    try {
+                        Log.i(TAG, "Trying fallback: standard loadSubscription()...")
+                        facade!!.loadSubscription()
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "Both subscription load methods failed", e2)
+                        currentError = "NO_SUBSCRIPTION"
+                        onError(e2)
+                        return@Thread
+                    }
                 }
                 
                 Log.i(TAG, "Load subscription return code: ${loadRc.code}")
@@ -524,8 +572,20 @@ class CatalystClient(
                     false
                 }
                 
+                // Log detailed license information
+                Log.i(TAG, "Sensor license check result: isLicensed=$isLicensed")
+                try {
+                    val instrumentName = sensorProps.getInstrumentName()
+                    val serialNumber = sensorProps.getSerialNumber()
+                    val firmware = sensorProps.getFirmware()
+                    Log.i(TAG, "Instrument details: Name=$instrumentName, Serial=$serialNumber, FW=$firmware")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not get instrument details: ${e.message}")
+                }
+                
+                // Per demo (MainModel.java line 631-647): If not licensed, disconnect and return error
                 if (!isLicensed) {
-                    Log.e(TAG, "Sensor is not licensed - disconnecting")
+                    Log.e(TAG, "Sensor is not licensed - disconnecting (per demo pattern)")
                     try {
                         facade?.disconnectFromSensor()
                     } catch (e: Exception) {
@@ -540,6 +600,7 @@ class CatalystClient(
                 }
                 
                 Log.i(TAG, "✓ Sensor is licensed")
+                
                 val instrumentInfo = try {
                     "Instrument: ${sensorProps.getInstrumentName()}, " +
                     "Serial: ${sensorProps.getSerialNumber()}, " +
@@ -554,7 +615,7 @@ class CatalystClient(
                 try {
                     facade!!.addCatalystEventListener(eventListener)
                     Log.d(TAG, "Event listener added successfully")
-                } catch (e: Exception) {
+        } catch (e: Exception) {
                     Log.e(TAG, "CRITICAL: Exception during addCatalystEventListener: ${e.message}", e)
                     Log.e(TAG, "Exception type: ${e.javaClass.name}")
                     e.printStackTrace()
@@ -564,7 +625,7 @@ class CatalystClient(
                     } catch (e2: Exception) {
                         Log.w(TAG, "Error disconnecting after listener add failure", e2)
                     }
-                    onError(e)
+            onError(e)
                     return@Thread
                 }
                 
@@ -588,13 +649,13 @@ class CatalystClient(
                 currentError = null // Clear error on successful connection
                 Log.i(TAG, "=== SDK connected - waiting for receiver data... ===")
                 
-            } catch (e: Exception) {
+        } catch (e: Exception) {
                 Log.e(TAG, "=== FATAL ERROR in Catalyst initialization ===", e)
                 Log.e(TAG, "Exception type: ${e.javaClass.name}")
                 Log.e(TAG, "Exception message: ${e.message}")
                 e.printStackTrace()
-                onError(e)
-            }
+            onError(e)
+        }
         }.start()
     }
     
