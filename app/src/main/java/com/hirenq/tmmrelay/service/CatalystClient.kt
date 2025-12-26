@@ -1,6 +1,7 @@
 package com.hirenq.tmmrelay.service
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
@@ -255,19 +256,33 @@ class CatalystClient(
                 
                 Log.i(TAG, "Step 4: Force activation - Calling login")
                 // THE FIX: Force activation inside YOUR app
-                // Call CatalystFacade.login(context) before loadSubscription()
+                // Try to call CatalystFacade.login(context) before loadSubscription()
                 // This opens the Trimble login UI
                 // User must log in with the same Trimble ID that owns the Catalyst subscription
                 try {
-                    Log.i(TAG, "Opening Trimble login UI...")
-                    CatalystFacade.login(context)
-                    Log.i(TAG, "✓ Trimble login UI opened - user should log in with Trimble ID")
-                    Log.i(TAG, "Waiting for user to complete login...")
-                    // Note: login() is synchronous and will show UI, wait for user action
-                    // After login succeeds, proceed to loadSubscription
+                    Log.i(TAG, "Attempting to open Trimble login UI...")
+                    // Try to call login method via reflection (may not exist in all SDK versions)
+                    try {
+                        val loginMethod = CatalystFacade::class.java.getMethod("login", Context::class.java)
+                        loginMethod.invoke(null, context)
+                        Log.i(TAG, "✓ Trimble login UI opened via CatalystFacade.login()")
+                    } catch (e: NoSuchMethodException) {
+                        // Method doesn't exist - try launching TMM login Intent instead
+                        Log.i(TAG, "CatalystFacade.login() not available, trying TMM Intent...")
+                        val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
+                            putExtra("applicationID", appGuid)
+                            putExtra("receiverName", "Catalyst") // Default receiver name
+                            putExtra("noInstall", false)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(loginIntent)
+                        Log.i(TAG, "✓ Trimble login UI opened via TMM Intent")
+                    }
+                    Log.i(TAG, "User should log in with Trimble ID that owns the Catalyst subscription")
+                    Log.i(TAG, "Note: Login happens in background - proceeding with subscription load")
                 } catch (e: Exception) {
-                    Log.w(TAG, "Login method not available or failed: ${e.message}")
-                    Log.w(TAG, "Continuing with subscription load - may need manual login in TMM")
+                    Log.w(TAG, "Login UI not available or failed: ${e.message}")
+                    Log.w(TAG, "Continuing with subscription load - user may need to login manually in TMM")
                 }
                 
                 Log.i(TAG, "Step 5: Loading subscription")
