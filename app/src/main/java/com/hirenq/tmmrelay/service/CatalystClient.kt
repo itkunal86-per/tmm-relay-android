@@ -42,23 +42,23 @@ class CatalystClient(
             try {
                 latestPosition = positionUpdate
                 // Convert radians to degrees for latitude/longitude
-                // Use getter methods explicitly to avoid property access issues
-                val latRadians = try { positionUpdate.latitude } catch (e: Exception) { 
+                // Use explicit getter method calls for Java compatibility
+                val latRadians = try { positionUpdate.getLatitude() } catch (e: Exception) { 
                     Log.e(TAG, "Error accessing latitude: ${e.message}", e)
                     0.0 
                 }
-                val lonRadians = try { positionUpdate.longitude } catch (e: Exception) { 
+                val lonRadians = try { positionUpdate.getLongitude() } catch (e: Exception) { 
                     Log.e(TAG, "Error accessing longitude: ${e.message}", e)
                     0.0 
                 }
                 val latDegrees = latRadians * 180.0 / PI
                 val lonDegrees = lonRadians * 180.0 / PI
                 
-                val hPrec = try { positionUpdate.hPrecision } catch (e: Exception) { 
+                val hPrec = try { positionUpdate.getHPrecision() } catch (e: Exception) { 
                     Log.e(TAG, "Error accessing hPrecision: ${e.message}", e)
                     Double.NaN 
                 }
-                val solution = try { positionUpdate.solution } catch (e: Exception) { 
+                val solution = try { positionUpdate.getSolution() } catch (e: Exception) { 
                     Log.e(TAG, "Error accessing solution: ${e.message}", e)
                     null 
                 }
@@ -74,21 +74,43 @@ class CatalystClient(
         }
 
         override fun onSatelliteUpdate(satelliteUpdate: SatelliteUpdate, satellitesInView: Int) {
-            latestSatellites = satelliteUpdate
-            latestSatellitesInView = satellitesInView
-            Log.d(TAG, "Satellites: count=$satellitesInView, total=${satelliteUpdate.satellites.size}")
-            // Update telemetry if we have position
-            latestPosition?.let { createAndSendTelemetry() }
+            try {
+                latestSatellites = satelliteUpdate
+                latestSatellitesInView = satellitesInView
+                val satellites = try { satelliteUpdate.getSatellites() } catch (e: Exception) { 
+                    Log.e(TAG, "Error accessing satellites: ${e.message}", e)
+                    emptyList() 
+                }
+                Log.d(TAG, "Satellites: count=$satellitesInView, total=${satellites.size}")
+                // Update telemetry if we have position
+                latestPosition?.let { createAndSendTelemetry() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in onSatelliteUpdate: ${e.message}", e)
+                e.printStackTrace()
+            }
         }
 
         override fun onPowerUpdate(powerSourceState: PowerSourceState) {
-            latestBattery = powerSourceState
-            Log.d(TAG, "Battery: ${powerSourceState.batteryLevel}%, charging=${powerSourceState.isCharging}")
+            try {
+                latestBattery = powerSourceState
+                val batteryLevel = try { powerSourceState.getBatteryLevel() } catch (e: Exception) { -1 }
+                val isCharging = try { powerSourceState.isCharging() } catch (e: Exception) { false }
+                Log.d(TAG, "Battery: ${batteryLevel}%, charging=$isCharging")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in onPowerUpdate: ${e.message}", e)
+                e.printStackTrace()
+            }
         }
 
         override fun onSensorStateChanged(sensorStateEvent: SensorStateEvent) {
-            latestHealth = sensorStateEvent
-            Log.d(TAG, "Sensor state: ${sensorStateEvent.sensorState}")
+            try {
+                latestHealth = sensorStateEvent
+                val sensorState = try { sensorStateEvent.getSensorState() } catch (e: Exception) { null }
+                Log.d(TAG, "Sensor state: $sensorState")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in onSensorStateChanged: ${e.message}", e)
+                e.printStackTrace()
+            }
         }
 
         override fun onRtkServiceAvailable() {
@@ -249,12 +271,12 @@ class CatalystClient(
         
         try {
             // Convert radians to degrees for latitude/longitude
-            // Use getter methods with try-catch for each property access
-            val latRadians = try { position.latitude } catch (e: Exception) { 
+            // Use explicit getter method calls for Java compatibility
+            val latRadians = try { position.getLatitude() } catch (e: Exception) { 
                 Log.e(TAG, "Error accessing latitude in createAndSendTelemetry: ${e.message}", e)
                 0.0 
             }
-            val lonRadians = try { position.longitude } catch (e: Exception) { 
+            val lonRadians = try { position.getLongitude() } catch (e: Exception) { 
                 Log.e(TAG, "Error accessing longitude in createAndSendTelemetry: ${e.message}", e)
                 0.0 
             }
@@ -262,18 +284,18 @@ class CatalystClient(
             val lonDegrees = lonRadians * 180.0 / PI
             
             // Map SolutionType to String
-            val solution = try { position.solution } catch (e: Exception) { 
+            val solution = try { position.getSolution() } catch (e: Exception) { 
                 Log.e(TAG, "Error accessing solution: ${e.message}", e)
                 null 
             }
             val fixTypeName = solution?.toString() ?: "UNKNOWN"
             
             // Get precision values safely
-            val hPrec = try { position.hPrecision } catch (e: Exception) { 
+            val hPrec = try { position.getHPrecision() } catch (e: Exception) { 
                 Log.e(TAG, "Error accessing hPrecision: ${e.message}", e)
                 Double.NaN 
             }
-            val vPrec = try { position.vPrecision } catch (e: Exception) { 
+            val vPrec = try { position.getVPrecision() } catch (e: Exception) { 
                 Log.e(TAG, "Error accessing vPrecision: ${e.message}", e)
                 Double.NaN 
             }
@@ -281,15 +303,15 @@ class CatalystClient(
             val vPrecision = if (vPrec.isNaN() || vPrec.isInfinite()) -1.0 else vPrec
             
             // Get DOP values safely
-            val pdopValue = try { position.pdop } catch (e: Exception) { 
+            val pdopValue = try { position.getPdop() } catch (e: Exception) { 
                 Log.e(TAG, "Error accessing pdop: ${e.message}", e)
                 Double.NaN 
             }
-            val hdopValue = try { position.hdop } catch (e: Exception) { 
+            val hdopValue = try { position.getHdop() } catch (e: Exception) { 
                 Log.e(TAG, "Error accessing hdop: ${e.message}", e)
                 Double.NaN 
             }
-            val vdopValue = try { position.vdop } catch (e: Exception) { 
+            val vdopValue = try { position.getVdop() } catch (e: Exception) { 
                 Log.e(TAG, "Error accessing vdop: ${e.message}", e)
                 Double.NaN 
             }
@@ -309,7 +331,7 @@ class CatalystClient(
             val health = when {
                 (latDegrees == 0.0 && lonDegrees == 0.0) || latDegrees.isNaN() || lonDegrees.isNaN() -> "NO_COORDINATES"
                 (fixTypeName.contains("AUTONOMOUS", ignoreCase = true) && latestSatellitesInView < 4) -> "NO_FIX"
-                latestHealth?.sensorState?.toString()?.contains("ERROR", ignoreCase = true) == true -> "ERROR"
+                try { latestHealth?.getSensorState()?.toString()?.contains("ERROR", ignoreCase = true) == true } catch (e: Exception) { false } -> "ERROR"
                 else -> "OK"
             }
             
@@ -318,7 +340,7 @@ class CatalystClient(
                 deviceId = deviceId,
                 latitude = latDegrees,
                 longitude = lonDegrees,
-                battery = latestBattery?.batteryLevel 
+                battery = try { latestBattery?.getBatteryLevel() } catch (e: Exception) { null }
                     ?: DeviceInfoUtil.batteryLevel(context), // Use receiver battery if available, else phone battery
                 fixType = fixTypeName,
                 timestamp = Instant.now().toString(),
@@ -326,7 +348,7 @@ class CatalystClient(
                 horizontalAccuracy = hPrecision,
                 verticalAccuracy = vPrecision,
                 satellites = latestSatellitesInView,
-                receiverBattery = latestBattery?.batteryLevel?.takeIf { it in 0..100 },
+                receiverBattery = try { latestBattery?.getBatteryLevel() } catch (e: Exception) { null }?.takeIf { it in 0..100 },
                 pdop = if (pdopValue.isNaN() || pdopValue.isInfinite()) null else pdopValue,
                 hdop = if (hdopValue.isNaN() || hdopValue.isInfinite()) null else hdopValue,
                 vdop = if (vdopValue.isNaN() || vdopValue.isInfinite()) null else vdopValue,
