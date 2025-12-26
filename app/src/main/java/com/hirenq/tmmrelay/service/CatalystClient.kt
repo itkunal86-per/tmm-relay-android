@@ -30,8 +30,18 @@ class CatalystClient(
     private var deviceId: String = ""
     private var isConnected = false
     private var currentError: String? = null
+    private var lastDataReceivedAt: Instant? = null
+    private var sdkConnected = false // Track SDK connection separately from actual data reception
     
-    fun getConnectionStatus(): Boolean = isConnected
+    fun getConnectionStatus(): Boolean {
+        // Only consider connected if we've received data recently (within last 30 seconds)
+        return if (lastDataReceivedAt != null) {
+            val secondsSinceLastData = java.time.Duration.between(lastDataReceivedAt, Instant.now()).seconds
+            sdkConnected && secondsSinceLastData < 30
+        } else {
+            false
+        }
+    }
     fun getCurrentError(): String? = currentError
     
     // Track latest values from different event types
@@ -44,6 +54,14 @@ class CatalystClient(
     private val eventListener = object : ICatalystEventListener {
         override fun onPositionUpdate(positionUpdate: PositionUpdate) {
             try {
+                // Mark that we received data from the receiver
+                lastDataReceivedAt = Instant.now()
+                if (!isConnected) {
+                    isConnected = true
+                    currentError = null
+                    Log.i(TAG, "Receiver connected - received position data")
+                }
+                
                 latestPosition = positionUpdate
                 // Convert radians to degrees for latitude/longitude
                 // Use explicit getter method calls for Java compatibility
@@ -79,6 +97,14 @@ class CatalystClient(
 
         override fun onSatelliteUpdate(satelliteUpdate: SatelliteUpdate, satellitesInView: Int) {
             try {
+                // Mark that we received data from the receiver
+                lastDataReceivedAt = Instant.now()
+                if (!isConnected) {
+                    isConnected = true
+                    currentError = null
+                    Log.i(TAG, "Receiver connected - received satellite data")
+                }
+                
                 latestSatellites = satelliteUpdate
                 latestSatellitesInView = satellitesInView
                 val satellites = try { satelliteUpdate.getSatellites() } catch (e: Exception) { 
@@ -96,6 +122,14 @@ class CatalystClient(
 
         override fun onPowerUpdate(powerSourceState: PowerSourceState) {
             try {
+                // Mark that we received data from the receiver
+                lastDataReceivedAt = Instant.now()
+                if (!isConnected) {
+                    isConnected = true
+                    currentError = null
+                    Log.i(TAG, "Receiver connected - received power data")
+                }
+                
                 latestBattery = powerSourceState
                 val batteryLevel = try { powerSourceState.getBatteryLevel() } catch (e: Exception) { -1 }
                 val isCharging = try { powerSourceState.isCharging() } catch (e: Exception) { false }
@@ -108,6 +142,14 @@ class CatalystClient(
 
         override fun onSensorStateChanged(sensorStateEvent: SensorStateEvent) {
             try {
+                // Mark that we received data from the receiver
+                lastDataReceivedAt = Instant.now()
+                if (!isConnected) {
+                    isConnected = true
+                    currentError = null
+                    Log.i(TAG, "Receiver connected - received sensor state data")
+                }
+                
                 latestHealth = sensorStateEvent
                 val sensorState = try { sensorStateEvent.getSensorState() } catch (e: Exception) { null }
                 Log.d(TAG, "Sensor state: $sensorState")
@@ -143,6 +185,9 @@ class CatalystClient(
 
         override fun onUsbConnectionErrorOccured() {
             Log.e(TAG, "USB connection error occurred")
+            isConnected = false
+            sdkConnected = false
+            lastDataReceivedAt = null
             onError(RuntimeException("USB connection error"))
         }
 
@@ -150,6 +195,8 @@ class CatalystClient(
             Log.e(TAG, "Subscription has expired")
             currentError = "NO_SUBSCRIPTION"
             isConnected = false
+            sdkConnected = false
+            lastDataReceivedAt = null
             onError(RuntimeException("Subscription has expired"))
         }
     }
@@ -312,13 +359,16 @@ class CatalystClient(
                     val error = RuntimeException("Failed to connect with code: ${connectRc.code}")
                     Log.e(TAG, "Failed to connect: $currentError", error)
                     isConnected = false
+                    sdkConnected = false
+                    lastDataReceivedAt = null
                     onError(error)
                     return@Thread
                 }
                 
-                isConnected = true
+                sdkConnected = true
+                // Don't set isConnected = true yet - wait for actual data from receiver
                 currentError = null // Clear error on successful connection
-                Log.i(TAG, "=== Successfully connected to Catalyst - waiting for position updates... ===")
+                Log.i(TAG, "=== SDK connected - waiting for receiver data... ===")
                 
             } catch (e: Exception) {
                 Log.e(TAG, "=== FATAL ERROR in Catalyst initialization ===", e)
@@ -432,7 +482,7 @@ class CatalystClient(
         try {
             Log.i(TAG, "Closing Catalyst client")
             
-            if (isConnected && facade != null) {
+            if (sdkConnected && facade != null) {
                 try {
                     // Only end survey if one was started
                     facade?.endSurvey()
@@ -445,10 +495,12 @@ class CatalystClient(
                 } catch (e: Exception) {
                     Log.w(TAG, "Error disconnecting from sensor", e)
                 }
-                
-                isConnected = false
-            currentError = null
             }
+            
+            isConnected = false
+            sdkConnected = false
+            lastDataReceivedAt = null
+            currentError = null
             
             try {
                 facade?.removeCatalystEventListener(eventListener)
