@@ -134,61 +134,86 @@ class TmmRelayService : Service() {
     override fun onCreate() {
         super.onCreate()
         
-        // Initialize Trimble Licensing SDK early (required for Trimble SDK features)
-        TrimbleLicensingUtil.initialize(this)
-        
-        val deviceId = DeviceInfoUtil.deviceId(this)
+        try {
+            android.util.Log.i("TmmRelayService", "=== Service onCreate() started ===")
+            
+            // Initialize Trimble Licensing SDK early (required for Trimble SDK features)
+            android.util.Log.i("TmmRelayService", "Step 1: Initializing Trimble Licensing")
+            TrimbleLicensingUtil.initialize(this)
+            android.util.Log.i("TmmRelayService", "Step 1: Trimble Licensing initialized")
+            
+            val deviceId = DeviceInfoUtil.deviceId(this)
+            android.util.Log.i("TmmRelayService", "Step 2: Device ID = $deviceId")
 
-        // Common handler for processing payloads from Catalyst client
-        val payloadHandler: (TelemetryPayload) -> Unit = { payload ->
-            lastMessageAt = Instant.now()
+            // Common handler for processing payloads from Catalyst client
+            val payloadHandler: (TelemetryPayload) -> Unit = { payload ->
+                try {
+                    lastMessageAt = Instant.now()
 
-            if (payload.latitude != 0.0 || payload.longitude != 0.0) {
-                lastKnownLatitude = payload.latitude
-                lastKnownLongitude = payload.longitude
-                lastKnownFixType = payload.fixType
-            }
+                    if (payload.latitude != 0.0 || payload.longitude != 0.0) {
+                        lastKnownLatitude = payload.latitude
+                        lastKnownLongitude = payload.longitude
+                        lastKnownFixType = payload.fixType
+                    }
 
-            broadcastDiagnostics(payload)
+                    broadcastDiagnostics(payload)
 
-            val shouldSendPost =
-                lastSuccessfulPostAt == null ||
-                    java.time.Duration
-                        .between(lastSuccessfulPostAt, Instant.now())
-                        .toMinutes() >= 5
+                    val shouldSendPost =
+                        lastSuccessfulPostAt == null ||
+                            java.time.Duration
+                                .between(lastSuccessfulPostAt, Instant.now())
+                                .toMinutes() >= 5
 
-            if (shouldSendPost) {
-                ApiClient.send(
-                    payload.copy(deviceId = deviceId),
-                    apiKey
-                ) { timestamp, payloadInfo, success ->
-                    if (success) lastSuccessfulPostAt = Instant.now()
-                    updateNotificationWithPost(timestamp, payloadInfo)
-                    updateDynamicStatus()
+                    if (shouldSendPost) {
+                        ApiClient.send(
+                            payload.copy(deviceId = deviceId),
+                            apiKey
+                        ) { timestamp, payloadInfo, success ->
+                            if (success) lastSuccessfulPostAt = Instant.now()
+                            updateNotificationWithPost(timestamp, payloadInfo)
+                            updateDynamicStatus()
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("TmmRelayService", "Error in payloadHandler: ${e.message}", e)
                 }
             }
+
+            // Always use Catalyst SDK
+            android.util.Log.i("TmmRelayService", "Step 3: Creating CatalystClient instance")
+            catalystClient = CatalystClient(
+                context = this,
+                onMessage = payloadHandler,
+                onError = { error ->
+                    android.util.Log.e("TmmRelayService", "Catalyst error: ${error.message}", error)
+                }
+            )
+            android.util.Log.i("TmmRelayService", "Step 3: CatalystClient created")
+
+            android.util.Log.i("TmmRelayService", "Step 4: Creating notification channel")
+            createNotificationChannel()
+            android.util.Log.i("TmmRelayService", "Step 4: Notification channel created")
+            
+            isRelayStarted = true
+
+            android.util.Log.i("TmmRelayService", "Step 5: Starting foreground service")
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification("Started")
+            )
+            android.util.Log.i("TmmRelayService", "Step 5: Foreground service started")
+
+            // Connect Catalyst client
+            android.util.Log.i("TmmRelayService", "Step 6: Connecting Catalyst client")
+            catalystClient?.connect(tenantId, deviceId)
+            android.util.Log.i("TmmRelayService", "Step 6: Catalyst connect() called")
+            
+        } catch (e: Exception) {
+            android.util.Log.e("TmmRelayService", "CRITICAL ERROR in onCreate(): ${e.message}", e)
+            android.util.Log.e("TmmRelayService", "Exception type: ${e.javaClass.name}")
+            e.printStackTrace()
+            // Don't rethrow - let the service continue if possible
         }
-
-        // Always use Catalyst SDK
-        android.util.Log.i("TmmRelayService", "Initializing Catalyst SDK")
-        catalystClient = CatalystClient(
-            context = this,
-            onMessage = payloadHandler,
-            onError = {
-                android.util.Log.e("TmmRelayService", "Catalyst error", it)
-            }
-        )
-
-        createNotificationChannel()
-        isRelayStarted = true
-
-        startForeground(
-            NOTIFICATION_ID,
-            buildNotification("Started")
-        )
-
-        // Connect Catalyst client
-        catalystClient?.connect(tenantId, deviceId)
 
         // Send initial diagnostics broadcast
         val initialPayload = TelemetryPayload(

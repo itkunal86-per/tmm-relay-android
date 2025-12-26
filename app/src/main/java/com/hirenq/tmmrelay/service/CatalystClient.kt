@@ -169,8 +169,19 @@ class CatalystClient(
                 
                 Log.i(TAG, "Step 3: Creating CatalystFacade instance")
                 // Create CatalystFacade instance
+                // Note: CatalystFacade constructor uses getExternalFilesDir which may require storage permissions
                 facade = try {
-                    CatalystFacade(appGuid, context.applicationContext)
+                    val appContext = context.applicationContext
+                    Log.d(TAG, "Using application context: ${appContext.packageName}")
+                    val facadeInstance = CatalystFacade(appGuid, appContext)
+                    Log.d(TAG, "CatalystFacade instance created successfully")
+                    facadeInstance
+                } catch (e: NullPointerException) {
+                    Log.e(TAG, "CRITICAL: NullPointerException creating CatalystFacade - may need storage permissions", e)
+                    Log.e(TAG, "Exception message: ${e.message}")
+                    e.printStackTrace()
+                    onError(RuntimeException("Failed to create CatalystFacade: Storage access may be required", e))
+                    return@Thread
                 } catch (e: Exception) {
                     Log.e(TAG, "CRITICAL: Failed to create CatalystFacade: ${e.message}", e)
                     Log.e(TAG, "Exception type: ${e.javaClass.name}")
@@ -178,7 +189,6 @@ class CatalystClient(
                     onError(e)
                     return@Thread
                 }
-                Log.d(TAG, "CatalystFacade instance created successfully")
                 
                 Log.i(TAG, "Step 4: Loading subscription")
                 // Load subscription (without TMM for now - can be changed to loadSubscriptionFromTrimbleMobileManager if needed)
