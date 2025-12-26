@@ -209,11 +209,18 @@ class CatalystClient(
         Thread {
             try {
                 Log.i(TAG, "=== Starting Catalyst Client Initialization ===")
+                Log.i(TAG, "NOTE: Connection requires valid Trimble subscription/license")
+                Log.i(TAG, "      - Subscription can be loaded from Trimble Mobile Manager (TMM)")
+                Log.i(TAG, "      - Or from a subscription file if TMM is not available")
                 
                 Log.i(TAG, "Step 1: Initializing Trimble Licensing")
                 // Initialize Trimble Licensing before using SDK
                 val licensingResult = TrimbleLicensingUtil.initialize(context)
-                Log.d(TAG, "Licensing initialization result: $licensingResult")
+                if (licensingResult) {
+                    Log.i(TAG, "✓ Trimble Licensing initialized successfully")
+                } else {
+                    Log.w(TAG, "⚠ Trimble Licensing initialization returned false (may still work)")
+                }
                 
                 Log.i(TAG, "Step 2: Getting app GUID")
                 // Get app GUID from application ID
@@ -244,37 +251,66 @@ class CatalystClient(
                 }
                 
                 Log.i(TAG, "Step 4: Loading subscription")
-                // Load subscription (without TMM for now - can be changed to loadSubscriptionFromTrimbleMobileManager if needed)
+                // Try to load subscription from Trimble Mobile Manager first (if TMM is installed)
+                // Fall back to loadSubscription() if TMM method is not available
                 val loadRc = try {
-                    facade!!.loadSubscription()
+                    // First, try loading from Trimble Mobile Manager
+                    try {
+                        val method = facade!!.javaClass.getMethod("loadSubscriptionFromTrimbleMobileManager")
+                        Log.i(TAG, "Attempting to load subscription from Trimble Mobile Manager...")
+                        method.invoke(facade) as ReturnCode
+                    } catch (e: NoSuchMethodException) {
+                        // Method doesn't exist, try standard loadSubscription
+                        Log.i(TAG, "TMM method not available, trying standard loadSubscription()...")
+                        facade!!.loadSubscription()
+                    } catch (e: Exception) {
+                        // If TMM method fails, try standard loadSubscription
+                        Log.w(TAG, "TMM subscription load failed: ${e.message}, trying standard method...")
+                        facade!!.loadSubscription()
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "CRITICAL: Exception during loadSubscription: ${e.message}", e)
                     Log.e(TAG, "Exception type: ${e.javaClass.name}")
                     e.printStackTrace()
+                    currentError = "NO_SUBSCRIPTION"
                     onError(e)
                     return@Thread
                 }
-                Log.d(TAG, "Load subscription return code: ${loadRc.code}")
+                
+                Log.i(TAG, "Load subscription return code: ${loadRc.code}")
+                Log.i(TAG, "Return code details: ${loadRc.code.toString()}")
                 
                 if (loadRc.code != DriverReturnCode.Success) {
                     // Map return code to specific error - check enum values safely
+                    val codeStr = loadRc.code.toString()
                     currentError = try {
                         when {
-                            loadRc.code.toString().contains("NoSubscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
-                            loadRc.code.toString().contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
-                            loadRc.code.toString().contains("Subscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
-                            loadRc.code.toString().contains("License", ignoreCase = true) -> "NOT_LICENSED"
-                            else -> "NO_SUBSCRIPTION" // Default to subscription error for loadSubscription failures
+                            codeStr.contains("NoSubscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
+                            codeStr.contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
+                            codeStr.contains("Subscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
+                            codeStr.contains("License", ignoreCase = true) -> "NOT_LICENSED"
+                            else -> {
+                                Log.w(TAG, "Unknown subscription error code: $codeStr")
+                                "NO_SUBSCRIPTION" // Default to subscription error
+                            }
                         }
                     } catch (e: Exception) {
                         "NO_SUBSCRIPTION" // Fallback
                     }
-                    val error = RuntimeException("Failed to load subscription with code: ${loadRc.code}")
-                    Log.e(TAG, "Failed to load subscription: $currentError", error)
+                    val error = RuntimeException("Failed to load subscription with code: ${loadRc.code} ($codeStr)")
+                    Log.e(TAG, "=== SUBSCRIPTION LOAD FAILED ===")
+                    Log.e(TAG, "Error type: $currentError")
+                    Log.e(TAG, "Return code: ${loadRc.code}")
+                    Log.e(TAG, "This usually means:")
+                    Log.e(TAG, "  1. No valid Trimble subscription/license is available")
+                    Log.e(TAG, "  2. Trimble Mobile Manager (TMM) is not installed or not running")
+                    Log.e(TAG, "  3. Subscription file is missing or invalid")
+                    Log.e(TAG, "  4. License has expired")
                     onError(error)
                     return@Thread
                 }
                 currentError = null // Clear error on success
+                Log.i(TAG, "✓ Subscription loaded successfully")
                 
                 Log.i(TAG, "Step 5: Initializing driver")
                 // Initialize driver for Catalyst
