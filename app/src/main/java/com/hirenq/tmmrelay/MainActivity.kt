@@ -14,7 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.hirenq.tmmrelay.databinding.ActivityMainBinding
 import com.hirenq.tmmrelay.service.TmmRelayService
-import com.hirenq.tmmrelay.util.SettingsUtil
+import com.hirenq.tmmrelay.util.CrashHandler
 
 class MainActivity : ComponentActivity() {
 
@@ -72,17 +72,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize crash handler to catch all uncaught exceptions
+        CrashHandler.init()
+        
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         updateStatusUI("Stopped", "", "")
         binding.tvDiagnostics.text = "Waiting for diagnostics..."
-
-        // Load and set the connection type preference
-        binding.switchUseCatalyst.isChecked = SettingsUtil.useCatalyst(this)
-        binding.switchUseCatalyst.setOnCheckedChangeListener { _, isChecked ->
-            SettingsUtil.setUseCatalyst(this, isChecked)
-        }
 
         binding.btnStart.setOnClickListener {
             ensurePermissions()

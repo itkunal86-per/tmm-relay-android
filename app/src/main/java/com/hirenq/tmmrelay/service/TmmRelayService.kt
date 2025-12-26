@@ -18,14 +18,12 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.hirenq.tmmrelay.R
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
-import com.hirenq.tmmrelay.util.SettingsUtil
 import com.hirenq.tmmrelay.util.TrimbleLicensingUtil
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 class TmmRelayService : Service() {
 
-    private var wsClient: TmmWebSocketClient? = null
     private var catalystClient: CatalystClient? = null
     private val tenantId = "ASSAM_LAND_REGISTRY"
     private val apiKey: String? = null
@@ -140,9 +138,8 @@ class TmmRelayService : Service() {
         TrimbleLicensingUtil.initialize(this)
         
         val deviceId = DeviceInfoUtil.deviceId(this)
-        val useCatalyst = SettingsUtil.useCatalyst(this)
 
-        // Common handler for processing payloads from either client
+        // Common handler for processing payloads from Catalyst client
         val payloadHandler: (TelemetryPayload) -> Unit = { payload ->
             lastMessageAt = Instant.now()
 
@@ -172,26 +169,15 @@ class TmmRelayService : Service() {
             }
         }
 
-        // Initialize the selected client based on setting
-        if (useCatalyst) {
-            android.util.Log.i("TmmRelayService", "Using Catalyst SDK")
-            catalystClient = CatalystClient(
-                context = this,
-                onMessage = payloadHandler,
-                onError = {
-                    android.util.Log.e("TmmRelayService", "Catalyst error", it)
-                }
-            )
-        } else {
-            android.util.Log.i("TmmRelayService", "Using WebSocket")
-            wsClient = TmmWebSocketClient(
-                context = this,
-                onMessage = payloadHandler,
-                onError = {
-                    android.util.Log.e("TmmRelayService", "WebSocket error", it)
-                }
-            )
-        }
+        // Always use Catalyst SDK
+        android.util.Log.i("TmmRelayService", "Initializing Catalyst SDK")
+        catalystClient = CatalystClient(
+            context = this,
+            onMessage = payloadHandler,
+            onError = {
+                android.util.Log.e("TmmRelayService", "Catalyst error", it)
+            }
+        )
 
         createNotificationChannel()
         isRelayStarted = true
@@ -201,12 +187,8 @@ class TmmRelayService : Service() {
             buildNotification("Started")
         )
 
-        // Connect the selected client
-        if (useCatalyst) {
-            catalystClient?.connect(tenantId, deviceId)
-        } else {
-            wsClient?.connect(tenantId, deviceId)
-        }
+        // Connect Catalyst client
+        catalystClient?.connect(tenantId, deviceId)
 
         // Send initial diagnostics broadcast
         val initialPayload = TelemetryPayload(
@@ -239,8 +221,7 @@ class TmmRelayService : Service() {
     override fun onDestroy() {
         isRelayStarted = false
         
-        // Close the active client
-        wsClient?.close()
+        // Close Catalyst client
         catalystClient?.close()
         
         handler.removeCallbacksAndMessages(null)
@@ -290,13 +271,10 @@ class TmmRelayService : Service() {
     // -------------------- NOTIFICATION & STATUS --------------------
 
     private fun updateDynamicStatus() {
-        val useCatalyst = SettingsUtil.useCatalyst(this)
-        val clientName = if (useCatalyst) "Catalyst SDK" else "TMM WebSocket"
-        
         val status =
             if (!isRelayStarted) "Stopped"
-            else if (lastSuccessfulPostAt == null) "Started ($clientName)"
-            else "Waiting for $clientName"
+            else if (lastSuccessfulPostAt == null) "Started (Catalyst SDK)"
+            else "Waiting for Catalyst SDK"
 
         updateNotification(status)
         broadcastStatusUpdate(status, null)

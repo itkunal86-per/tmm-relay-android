@@ -42,12 +42,33 @@ class CatalystClient(
             try {
                 latestPosition = positionUpdate
                 // Convert radians to degrees for latitude/longitude
-                val latDegrees = positionUpdate.latitude * 180.0 / PI
-                val lonDegrees = positionUpdate.longitude * 180.0 / PI
-                Log.d(TAG, "Position: lat=$latDegrees, lon=$lonDegrees, acc=${positionUpdate.hPrecision}, fix=${positionUpdate.solution}")
+                // Use getter methods explicitly to avoid property access issues
+                val latRadians = try { positionUpdate.latitude } catch (e: Exception) { 
+                    Log.e(TAG, "Error accessing latitude: ${e.message}", e)
+                    0.0 
+                }
+                val lonRadians = try { positionUpdate.longitude } catch (e: Exception) { 
+                    Log.e(TAG, "Error accessing longitude: ${e.message}", e)
+                    0.0 
+                }
+                val latDegrees = latRadians * 180.0 / PI
+                val lonDegrees = lonRadians * 180.0 / PI
+                
+                val hPrec = try { positionUpdate.hPrecision } catch (e: Exception) { 
+                    Log.e(TAG, "Error accessing hPrecision: ${e.message}", e)
+                    Double.NaN 
+                }
+                val solution = try { positionUpdate.solution } catch (e: Exception) { 
+                    Log.e(TAG, "Error accessing solution: ${e.message}", e)
+                    null 
+                }
+                
+                Log.d(TAG, "Position: lat=$latDegrees, lon=$lonDegrees, acc=$hPrec, fix=$solution")
                 createAndSendTelemetry()
             } catch (e: Exception) {
-                Log.e(TAG, "Error in onPositionUpdate", e)
+                Log.e(TAG, "Error in onPositionUpdate: ${e.message}", e)
+                Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                e.printStackTrace()
                 onError(e)
             }
         }
@@ -112,21 +133,42 @@ class CatalystClient(
         // Run initialization on a background thread to avoid blocking
         Thread {
             try {
-                Log.i(TAG, "Initializing Trimble Licensing")
+                Log.i(TAG, "=== Starting Catalyst Client Initialization ===")
+                
+                Log.i(TAG, "Step 1: Initializing Trimble Licensing")
                 // Initialize Trimble Licensing before using SDK
-                TrimbleLicensingUtil.initialize(context)
+                val licensingResult = TrimbleLicensingUtil.initialize(context)
+                Log.d(TAG, "Licensing initialization result: $licensingResult")
                 
-                Log.i(TAG, "Initializing Catalyst SDK")
-                
+                Log.i(TAG, "Step 2: Getting app GUID")
                 // Get app GUID from application ID
                 val appGuid = context.packageName
                 Log.d(TAG, "Using app GUID: $appGuid")
                 
+                Log.i(TAG, "Step 3: Creating CatalystFacade instance")
                 // Create CatalystFacade instance
-                facade = CatalystFacade(appGuid, context.applicationContext)
+                facade = try {
+                    CatalystFacade(appGuid, context.applicationContext)
+                } catch (e: Exception) {
+                    Log.e(TAG, "CRITICAL: Failed to create CatalystFacade: ${e.message}", e)
+                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                    e.printStackTrace()
+                    onError(e)
+                    return@Thread
+                }
+                Log.d(TAG, "CatalystFacade instance created successfully")
                 
+                Log.i(TAG, "Step 4: Loading subscription")
                 // Load subscription (without TMM for now - can be changed to loadSubscriptionFromTrimbleMobileManager if needed)
-                val loadRc = facade!!.loadSubscription()
+                val loadRc = try {
+                    facade!!.loadSubscription()
+                } catch (e: Exception) {
+                    Log.e(TAG, "CRITICAL: Exception during loadSubscription: ${e.message}", e)
+                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                    e.printStackTrace()
+                    onError(e)
+                    return@Thread
+                }
                 Log.d(TAG, "Load subscription return code: ${loadRc.code}")
                 
                 if (loadRc.code != DriverReturnCode.Success) {
@@ -136,8 +178,17 @@ class CatalystClient(
                     return@Thread
                 }
                 
+                Log.i(TAG, "Step 5: Initializing driver")
                 // Initialize driver for Catalyst
-                val initRc = facade!!.initDriver(DriverType.Catalyst)
+                val initRc = try {
+                    facade!!.initDriver(DriverType.Catalyst)
+                } catch (e: Exception) {
+                    Log.e(TAG, "CRITICAL: Exception during initDriver: ${e.message}", e)
+                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                    e.printStackTrace()
+                    onError(e)
+                    return@Thread
+                }
                 Log.d(TAG, "Init driver return code: ${initRc.code}")
                 
                 if (initRc.code != DriverReturnCode.Success) {
@@ -147,12 +198,30 @@ class CatalystClient(
                     return@Thread
                 }
                 
+                Log.i(TAG, "Step 6: Adding event listener")
                 // Add event listener
-                facade!!.addCatalystEventListener(eventListener)
+                try {
+                    facade!!.addCatalystEventListener(eventListener)
+                    Log.d(TAG, "Event listener added successfully")
+                } catch (e: Exception) {
+                    Log.e(TAG, "CRITICAL: Exception during addCatalystEventListener: ${e.message}", e)
+                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                    e.printStackTrace()
+                    onError(e)
+                    return@Thread
+                }
                 
+                Log.i(TAG, "Step 7: Connecting to sensor")
                 // Connect to sensor (this may take time, especially on first connection)
-                Log.i(TAG, "Attempting to connect to Catalyst sensor...")
-                val connectRc = facade!!.connect()
+                val connectRc = try {
+                    facade!!.connect()
+                } catch (e: Exception) {
+                    Log.e(TAG, "CRITICAL: Exception during connect: ${e.message}", e)
+                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                    e.printStackTrace()
+                    onError(e)
+                    return@Thread
+                }
                 Log.d(TAG, "Connect return code: ${connectRc.code}")
                 
                 if (connectRc.code != DriverReturnCode.Success) {
@@ -163,11 +232,13 @@ class CatalystClient(
                 }
                 
                 isConnected = true
-                Log.i(TAG, "Successfully connected to Catalyst - waiting for position updates...")
+                Log.i(TAG, "=== Successfully connected to Catalyst - waiting for position updates... ===")
                 
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize Catalyst", e)
-                Log.e(TAG, "Exception stack trace", e)
+                Log.e(TAG, "=== FATAL ERROR in Catalyst initialization ===", e)
+                Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                Log.e(TAG, "Exception message: ${e.message}")
+                e.printStackTrace()
                 onError(e)
             }
         }.start()
@@ -178,26 +249,50 @@ class CatalystClient(
         
         try {
             // Convert radians to degrees for latitude/longitude
-            // Use getter methods explicitly to avoid Kotlin property access issues
-            val latRadians = position.latitude
-            val lonRadians = position.longitude
+            // Use getter methods with try-catch for each property access
+            val latRadians = try { position.latitude } catch (e: Exception) { 
+                Log.e(TAG, "Error accessing latitude in createAndSendTelemetry: ${e.message}", e)
+                0.0 
+            }
+            val lonRadians = try { position.longitude } catch (e: Exception) { 
+                Log.e(TAG, "Error accessing longitude in createAndSendTelemetry: ${e.message}", e)
+                0.0 
+            }
             val latDegrees = latRadians * 180.0 / PI
             val lonDegrees = lonRadians * 180.0 / PI
             
             // Map SolutionType to String
-            val solution = position.solution
+            val solution = try { position.solution } catch (e: Exception) { 
+                Log.e(TAG, "Error accessing solution: ${e.message}", e)
+                null 
+            }
             val fixTypeName = solution?.toString() ?: "UNKNOWN"
             
             // Get precision values safely
-            val hPrec = position.hPrecision
-            val vPrec = position.vPrecision
+            val hPrec = try { position.hPrecision } catch (e: Exception) { 
+                Log.e(TAG, "Error accessing hPrecision: ${e.message}", e)
+                Double.NaN 
+            }
+            val vPrec = try { position.vPrecision } catch (e: Exception) { 
+                Log.e(TAG, "Error accessing vPrecision: ${e.message}", e)
+                Double.NaN 
+            }
             val hPrecision = if (hPrec.isNaN() || hPrec.isInfinite()) -1.0 else hPrec
             val vPrecision = if (vPrec.isNaN() || vPrec.isInfinite()) -1.0 else vPrec
             
             // Get DOP values safely
-            val pdopValue = position.pdop
-            val hdopValue = position.hdop
-            val vdopValue = position.vdop
+            val pdopValue = try { position.pdop } catch (e: Exception) { 
+                Log.e(TAG, "Error accessing pdop: ${e.message}", e)
+                Double.NaN 
+            }
+            val hdopValue = try { position.hdop } catch (e: Exception) { 
+                Log.e(TAG, "Error accessing hdop: ${e.message}", e)
+                Double.NaN 
+            }
+            val vdopValue = try { position.vdop } catch (e: Exception) { 
+                Log.e(TAG, "Error accessing vdop: ${e.message}", e)
+                Double.NaN 
+            }
             
             // Calculate receiver health based on position and satellite data
             val receiverHealth = when {
