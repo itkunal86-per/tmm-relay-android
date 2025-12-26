@@ -114,22 +114,11 @@ dependencies {
     // - trimble.jssi.android.communicators-release: Android communicators for JSSI (used by CatalystFacade)
     // - JTDDTransformation-release: Coordinate transformation library (available via CoordinateTransformUtil)
     // - empowerlib-1.2.0.26: Empower library for additional Trimble functionality (may contain BlueBottle classes)
-    // Note: AAR files are included with transitive dependencies to ensure all required classes are available
-    implementation(mapOf("name" to "empowerlib-1.2.0.26", "ext" to "aar")) {
-        isTransitive = true
-    }
-    implementation(mapOf("name" to "JTDDTransformation-release", "ext" to "aar")) {
-        isTransitive = true
-    }
-    implementation(mapOf("name" to "trimble.jssi.android.communicators-release", "ext" to "aar")) {
-        isTransitive = true
-    }
-    implementation(mapOf("name" to "trimble.jssi.core-release", "ext" to "aar")) {
-        isTransitive = true
-    }
-    implementation(mapOf("name" to "Trimble.Licensing.Android", "ext" to "aar")) {
-        isTransitive = true
-    }
+    implementation(mapOf("name" to "empowerlib-1.2.0.26", "ext" to "aar"))
+    implementation(mapOf("name" to "JTDDTransformation-release", "ext" to "aar"))
+    implementation(mapOf("name" to "trimble.jssi.android.communicators-release", "ext" to "aar"))
+    implementation(mapOf("name" to "trimble.jssi.core-release", "ext" to "aar"))
+    implementation(mapOf("name" to "Trimble.Licensing.Android", "ext" to "aar"))
 
     // Testing
    testImplementation("junit:junit:4.13.2")
