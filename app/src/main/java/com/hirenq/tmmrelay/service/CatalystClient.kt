@@ -90,7 +90,7 @@ class CatalystClient(
                 }
                 
                 Log.d(TAG, "Position: lat=$latDegrees, lon=$lonDegrees, acc=$hPrec, fix=$solution")
-                createAndSendTelemetry()
+                this@CatalystClient.createAndSendTelemetry()
             } catch (e: Exception) {
                 Log.e(TAG, "Error in onPositionUpdate: ${e.message}", e)
                 Log.e(TAG, "Exception type: ${e.javaClass.name}")
@@ -117,7 +117,7 @@ class CatalystClient(
                 }
                 Log.d(TAG, "Satellites: count=$satellitesInView, total=${satellites.size}")
                 // Update telemetry if we have position
-                latestPosition?.let { createAndSendTelemetry() }
+                latestPosition?.let { this@CatalystClient.createAndSendTelemetry() }
             } catch (e: Exception) {
                 Log.e(TAG, "Error in onSatelliteUpdate: ${e.message}", e)
                 e.printStackTrace()
@@ -664,13 +664,13 @@ class CatalystClient(
                 currentError = null // Clear error on successful connection
                 Log.i(TAG, "=== SDK connected - waiting for receiver data... ===")
                 
-        } catch (e: Exception) {
+            } catch (e: Exception) {
                 Log.e(TAG, "=== FATAL ERROR in Catalyst initialization ===", e)
                 Log.e(TAG, "Exception type: ${e.javaClass.name}")
                 Log.e(TAG, "Exception message: ${e.message}")
                 e.printStackTrace()
-            onError(e)
-        }
+                onError(e)
+            }
         }.start()
     }
     
