@@ -29,6 +29,10 @@ class CatalystClient(
     private var tenantId: String = ""
     private var deviceId: String = ""
     private var isConnected = false
+    private var currentError: String? = null
+    
+    fun getConnectionStatus(): Boolean = isConnected
+    fun getCurrentError(): String? = currentError
     
     // Track latest values from different event types
     private var latestPosition: PositionUpdate? = null
@@ -144,6 +148,8 @@ class CatalystClient(
 
         override fun onSubscriptionHasExpired() {
             Log.e(TAG, "Subscription has expired")
+            currentError = "NO_SUBSCRIPTION"
+            isConnected = false
             onError(RuntimeException("Subscription has expired"))
         }
     }
@@ -204,11 +210,24 @@ class CatalystClient(
                 Log.d(TAG, "Load subscription return code: ${loadRc.code}")
                 
                 if (loadRc.code != DriverReturnCode.Success) {
+                    // Map return code to specific error - check enum values safely
+                    currentError = try {
+                        when {
+                            loadRc.code.toString().contains("NoSubscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
+                            loadRc.code.toString().contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
+                            loadRc.code.toString().contains("Subscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
+                            loadRc.code.toString().contains("License", ignoreCase = true) -> "NOT_LICENSED"
+                            else -> "NO_SUBSCRIPTION" // Default to subscription error for loadSubscription failures
+                        }
+                    } catch (e: Exception) {
+                        "NO_SUBSCRIPTION" // Fallback
+                    }
                     val error = RuntimeException("Failed to load subscription with code: ${loadRc.code}")
-                    Log.e(TAG, "Failed to load subscription", error)
+                    Log.e(TAG, "Failed to load subscription: $currentError", error)
                     onError(error)
                     return@Thread
                 }
+                currentError = null // Clear error on success
                 
                 Log.i(TAG, "Step 5: Initializing driver")
                 // Initialize driver for Catalyst
@@ -224,11 +243,27 @@ class CatalystClient(
                 Log.d(TAG, "Init driver return code: ${initRc.code}")
                 
                 if (initRc.code != DriverReturnCode.Success) {
+                    // Map return code to specific error - check enum values safely
+                    currentError = try {
+                        val codeStr = initRc.code.toString()
+                        when {
+                            codeStr.contains("ReceiverNotSupported", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
+                            codeStr.contains("NoBluetoothPermission", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
+                            codeStr.contains("Bluetooth", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
+                            codeStr.contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
+                            codeStr.contains("License", ignoreCase = true) -> "NOT_LICENSED"
+                            codeStr.contains("Receiver", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
+                            else -> "RECEIVER_NOT_SUPPORTED" // Default to receiver error
+                        }
+                    } catch (e: Exception) {
+                        "RECEIVER_NOT_SUPPORTED" // Fallback
+                    }
                     val error = RuntimeException("Failed to initialize driver with code: ${initRc.code}")
-                    Log.e(TAG, "Failed to initialize driver", error)
+                    Log.e(TAG, "Failed to initialize driver: $currentError", error)
                     onError(error)
                     return@Thread
                 }
+                currentError = null // Clear error on success
                 
                 Log.i(TAG, "Step 6: Adding event listener")
                 // Add event listener
@@ -257,13 +292,32 @@ class CatalystClient(
                 Log.d(TAG, "Connect return code: ${connectRc.code}")
                 
                 if (connectRc.code != DriverReturnCode.Success) {
+                    // Map return code to specific error - check enum values safely
+                    currentError = try {
+                        val codeStr = connectRc.code.toString()
+                        when {
+                            codeStr.contains("NoBluetoothPermission", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
+                            codeStr.contains("Bluetooth", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
+                            codeStr.contains("ReceiverNotSupported", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
+                            codeStr.contains("Receiver", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
+                            codeStr.contains("NoSubscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
+                            codeStr.contains("Subscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
+                            codeStr.contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
+                            codeStr.contains("License", ignoreCase = true) -> "NOT_LICENSED"
+                            else -> "CONNECTION_FAILED" // Generic connection error
+                        }
+                    } catch (e: Exception) {
+                        "CONNECTION_FAILED" // Fallback
+                    }
                     val error = RuntimeException("Failed to connect with code: ${connectRc.code}")
-                    Log.e(TAG, "Failed to connect", error)
+                    Log.e(TAG, "Failed to connect: $currentError", error)
+                    isConnected = false
                     onError(error)
                     return@Thread
                 }
                 
                 isConnected = true
+                currentError = null // Clear error on successful connection
                 Log.i(TAG, "=== Successfully connected to Catalyst - waiting for position updates... ===")
                 
             } catch (e: Exception) {
@@ -393,6 +447,7 @@ class CatalystClient(
                 }
                 
                 isConnected = false
+            currentError = null
             }
             
             try {

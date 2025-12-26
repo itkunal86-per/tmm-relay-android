@@ -57,13 +57,18 @@ class MainActivity : ComponentActivity() {
                     intent.getIntExtra("receiverBattery", -1)
                 else null
 
+            val isConnected = intent.getBooleanExtra("isConnected", false)
+            val error = intent.getStringExtra("error")
+
             updateDiagnosticsUI(
                 fixType,
                 satellites,
                 hAcc,
                 vAcc,
                 receiverHealth,
-                receiverBattery
+                receiverBattery,
+                isConnected,
+                error
             )
         }
     }
@@ -197,7 +202,9 @@ class MainActivity : ComponentActivity() {
         hAcc: Double,
         vAcc: Double,
         receiverHealth: String,
-        receiverBattery: Int?
+        receiverBattery: Int?,
+        isConnected: Boolean,
+        error: String?
     ) {
         val locationGranted =
             ContextCompat.checkSelfPermission(
@@ -217,8 +224,14 @@ class MainActivity : ComponentActivity() {
             append(if (bluetoothGranted) "✔ Bluetooth\n\n" else "✘ Bluetooth\n\n")
 
             append("Receiver:\n")
-            append(if (satellites > 0) "Connected\n" else "Not Connected\n")
-            append("Battery: ${receiverBattery?.let { "$it%" } ?: "N/A"}\n\n")
+            append(if (isConnected) "✔ Connected\n" else "✘ Not Connected\n")
+            append("Battery: ${receiverBattery?.let { "$it%" } ?: "N/A"}\n")
+            
+            // Display error if present
+            error?.let {
+                append("\nError: $it\n")
+            }
+            append("\n")
 
             append("GNSS Fix:\n")
             append("FixType: $fixType\n")
@@ -229,6 +242,17 @@ class MainActivity : ComponentActivity() {
         }
 
         binding.tvDiagnostics.text = text
+        
+        // Update error display if present
+        if (error != null) {
+            binding.tvErrorStatus.visibility = android.view.View.VISIBLE
+            binding.tvErrorStatus.text = "⚠ $error"
+            binding.tvErrorStatus.setTextColor(
+                ContextCompat.getColor(this, android.R.color.holo_red_dark)
+            )
+        } else {
+            binding.tvErrorStatus.visibility = android.view.View.GONE
+        }
     }
 
     // ---------------- PERMISSIONS ----------------

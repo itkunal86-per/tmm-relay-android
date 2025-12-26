@@ -75,6 +75,13 @@ class TmmRelayService : Service() {
             payload.receiverBattery?.let {
                 putExtra("receiverBattery", it)
             }
+            
+            // Add connection status and error state
+            val isConnected = catalystClient?.getConnectionStatus() ?: false
+            putExtra("isConnected", isConnected)
+            catalystClient?.getCurrentError()?.let { error ->
+                putExtra("error", error)
+            }
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
@@ -147,38 +154,38 @@ class TmmRelayService : Service() {
             android.util.Log.i("TmmRelayService", "Step 1: Trimble Licensing initialized")
 
             // Common handler for processing payloads from Catalyst client
-            val payloadHandler: (TelemetryPayload) -> Unit = { payload ->
+        val payloadHandler: (TelemetryPayload) -> Unit = { payload ->
                 try {
-                    lastMessageAt = Instant.now()
+            lastMessageAt = Instant.now()
 
-                    if (payload.latitude != 0.0 || payload.longitude != 0.0) {
-                        lastKnownLatitude = payload.latitude
-                        lastKnownLongitude = payload.longitude
-                        lastKnownFixType = payload.fixType
-                    }
+            if (payload.latitude != 0.0 || payload.longitude != 0.0) {
+                lastKnownLatitude = payload.latitude
+                lastKnownLongitude = payload.longitude
+                lastKnownFixType = payload.fixType
+            }
 
-                    broadcastDiagnostics(payload)
+            broadcastDiagnostics(payload)
 
-                    val shouldSendPost =
-                        lastSuccessfulPostAt == null ||
-                            java.time.Duration
-                                .between(lastSuccessfulPostAt, Instant.now())
-                                .toMinutes() >= 5
+            val shouldSendPost =
+                lastSuccessfulPostAt == null ||
+                    java.time.Duration
+                        .between(lastSuccessfulPostAt, Instant.now())
+                        .toMinutes() >= 5
 
-                    if (shouldSendPost) {
-                        ApiClient.send(
-                            payload.copy(deviceId = deviceId),
-                            apiKey
-                        ) { timestamp, payloadInfo, success ->
-                            if (success) lastSuccessfulPostAt = Instant.now()
-                            updateNotificationWithPost(timestamp, payloadInfo)
-                            updateDynamicStatus()
-                        }
+            if (shouldSendPost) {
+                ApiClient.send(
+                    payload.copy(deviceId = deviceId),
+                    apiKey
+                ) { timestamp, payloadInfo, success ->
+                    if (success) lastSuccessfulPostAt = Instant.now()
+                    updateNotificationWithPost(timestamp, payloadInfo)
+                    updateDynamicStatus()
+                }
                     }
                 } catch (e: Exception) {
                     android.util.Log.e("TmmRelayService", "Error in payloadHandler: ${e.message}", e)
-                }
             }
+        }
 
             // Always use Catalyst SDK
             android.util.Log.i("TmmRelayService", "Step 3: Creating CatalystClient instance")
@@ -187,21 +194,31 @@ class TmmRelayService : Service() {
                 onMessage = payloadHandler,
                 onError = { error ->
                     android.util.Log.e("TmmRelayService", "Catalyst error: ${error.message}", error)
+                    // Broadcast error state immediately
+                    val diagnosticsIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                        putExtra("locationPermission", hasLocationPermission())
+                        putExtra("bluetoothPermission", hasBluetoothPermission())
+                        putExtra("isConnected", false)
+                        catalystClient?.getCurrentError()?.let { errorState ->
+                            putExtra("error", errorState)
+                        }
+                    }
+                    LocalBroadcastManager.getInstance(this).sendBroadcast(diagnosticsIntent)
                 }
             )
             android.util.Log.i("TmmRelayService", "Step 3: CatalystClient created")
 
             android.util.Log.i("TmmRelayService", "Step 4: Creating notification channel")
-            createNotificationChannel()
+        createNotificationChannel()
             android.util.Log.i("TmmRelayService", "Step 4: Notification channel created")
             
-            isRelayStarted = true
+        isRelayStarted = true
 
             android.util.Log.i("TmmRelayService", "Step 5: Starting foreground service")
-            startForeground(
-                NOTIFICATION_ID,
-                buildNotification("Started")
-            )
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification("Started")
+        )
             android.util.Log.i("TmmRelayService", "Step 5: Foreground service started")
 
             // Connect Catalyst client
