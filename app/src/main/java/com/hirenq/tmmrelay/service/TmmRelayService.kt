@@ -209,16 +209,16 @@ class TmmRelayService : Service() {
             android.util.Log.i("TmmRelayService", "Step 3: CatalystClient created")
 
             android.util.Log.i("TmmRelayService", "Step 4: Creating notification channel")
-        createNotificationChannel()
+            createNotificationChannel()
             android.util.Log.i("TmmRelayService", "Step 4: Notification channel created")
             
-        isRelayStarted = true
+            isRelayStarted = true
 
             android.util.Log.i("TmmRelayService", "Step 5: Starting foreground service")
-        startForeground(
-            NOTIFICATION_ID,
-            buildNotification("Started")
-        )
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification("Started")
+            )
             android.util.Log.i("TmmRelayService", "Step 5: Foreground service started")
 
             // Connect Catalyst client
