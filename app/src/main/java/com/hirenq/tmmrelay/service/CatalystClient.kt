@@ -90,7 +90,7 @@ class CatalystClient(
                 }
                 
                 Log.d(TAG, "Position: lat=$latDegrees, lon=$lonDegrees, acc=$hPrec, fix=$solution")
-                this@CatalystClient.createAndSendTelemetry()
+                createAndSendTelemetry()
             } catch (e: Exception) {
                 Log.e(TAG, "Error in onPositionUpdate: ${e.message}", e)
                 Log.e(TAG, "Exception type: ${e.javaClass.name}")
@@ -443,6 +443,12 @@ class CatalystClient(
                     Log.w(TAG, "Could not get subscription info: ${e.message}")
                     // Continue anyway - subscription may still be valid
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during login/subscription loading: ${e.message}", e)
+                currentError = "NO_SUBSCRIPTION"
+                onError(e)
+                return@Thread
+            }
                 
                 Log.i(TAG, "Step 7: Initializing driver")
                 // Initialize driver for Catalyst
@@ -674,7 +680,7 @@ class CatalystClient(
         }.start()
     }
     
-    private fun createAndSendTelemetry() {
+    fun createAndSendTelemetry() {
         val position = latestPosition ?: return
         
         try {
