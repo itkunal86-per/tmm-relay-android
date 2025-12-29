@@ -483,10 +483,10 @@ class CatalystClient(
                 onError(e)
                 return@Thread
             }
-                
-                Log.i(TAG, "Step 7: Initializing driver")
-                // Initialize driver for Catalyst
-                val initRc = try {
+            
+            Log.i(TAG, "Step 7: Initializing driver")
+            // Initialize driver for Catalyst
+            val initRc = try {
                     facade!!.initDriver(DriverType.Catalyst)
                 } catch (e: Exception) {
                     Log.e(TAG, "CRITICAL: Exception during initDriver: ${e.message}", e)
@@ -495,214 +495,214 @@ class CatalystClient(
                     onError(e)
                     return@Thread
                 }
-                Log.d(TAG, "Init driver return code: ${initRc.code}")
-                
-                if (initRc.code != DriverReturnCode.Success) {
-                    // Map return code to specific error - check enum values safely
-                    currentError = try {
-                        val codeStr = initRc.code.toString()
-                        when {
-                            codeStr.contains("ReceiverNotSupported", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
-                            codeStr.contains("NoBluetoothPermission", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
-                            codeStr.contains("Bluetooth", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
-                            codeStr.contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
-                            codeStr.contains("License", ignoreCase = true) -> "NOT_LICENSED"
-                            codeStr.contains("Receiver", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
-                            else -> "RECEIVER_NOT_SUPPORTED" // Default to receiver error
-                        }
-                    } catch (e: Exception) {
-                        "RECEIVER_NOT_SUPPORTED" // Fallback
+            Log.d(TAG, "Init driver return code: ${initRc.code}")
+            
+            if (initRc.code != DriverReturnCode.Success) {
+                // Map return code to specific error - check enum values safely
+                currentError = try {
+                    val codeStr = initRc.code.toString()
+                    when {
+                        codeStr.contains("ReceiverNotSupported", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
+                        codeStr.contains("NoBluetoothPermission", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
+                        codeStr.contains("Bluetooth", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
+                        codeStr.contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
+                        codeStr.contains("License", ignoreCase = true) -> "NOT_LICENSED"
+                        codeStr.contains("Receiver", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
+                        else -> "RECEIVER_NOT_SUPPORTED" // Default to receiver error
                     }
-                    val error = RuntimeException("Failed to initialize driver with code: ${initRc.code}")
-                    Log.e(TAG, "Failed to initialize driver: $currentError", error)
-                    onError(error)
-                    return@Thread
-                }
-                currentError = null // Clear error on success
-                
-                Log.i(TAG, "Step 8: Connecting to sensor")
-                // Connect to sensor (this may take time, especially on first connection)
-                // NOTE: Event listener is added AFTER successful connection (per demo pattern)
-                val connectRc = try {
-                    facade!!.connect()
                 } catch (e: Exception) {
-                    Log.e(TAG, "CRITICAL: Exception during connect: ${e.message}", e)
-                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                    e.printStackTrace()
-                    onError(e)
-                    return@Thread
+                    "RECEIVER_NOT_SUPPORTED" // Fallback
                 }
-                Log.d(TAG, "Connect return code: ${connectRc.code}")
-                
-                if (connectRc.code != DriverReturnCode.Success) {
-                    // Map return code to specific error - check enum values safely
-                    currentError = try {
-                        val codeStr = connectRc.code.toString()
-                        when {
-                            codeStr.contains("NoBluetoothPermission", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
-                            codeStr.contains("Bluetooth", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
-                            codeStr.contains("ReceiverNotSupported", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
-                            codeStr.contains("Receiver", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
-                            codeStr.contains("NoSubscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
-                            codeStr.contains("Subscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
-                            codeStr.contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
-                            codeStr.contains("License", ignoreCase = true) -> "NOT_LICENSED"
-                            else -> "CONNECTION_FAILED" // Generic connection error
-                        }
-                    } catch (e: Exception) {
-                        "CONNECTION_FAILED" // Fallback
+                val error = RuntimeException("Failed to initialize driver with code: ${initRc.code}")
+                Log.e(TAG, "Failed to initialize driver: $currentError", error)
+                onError(error)
+                return@Thread
+            }
+            currentError = null // Clear error on success
+            
+            Log.i(TAG, "Step 8: Connecting to sensor")
+            // Connect to sensor (this may take time, especially on first connection)
+            // NOTE: Event listener is added AFTER successful connection (per demo pattern)
+            val connectRc = try {
+                facade!!.connect()
+            } catch (e: Exception) {
+                Log.e(TAG, "CRITICAL: Exception during connect: ${e.message}", e)
+                Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                e.printStackTrace()
+                onError(e)
+                return@Thread
+            }
+            Log.d(TAG, "Connect return code: ${connectRc.code}")
+            
+            if (connectRc.code != DriverReturnCode.Success) {
+                // Map return code to specific error - check enum values safely
+                currentError = try {
+                    val codeStr = connectRc.code.toString()
+                    when {
+                        codeStr.contains("NoBluetoothPermission", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
+                        codeStr.contains("Bluetooth", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
+                        codeStr.contains("ReceiverNotSupported", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
+                        codeStr.contains("Receiver", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
+                        codeStr.contains("NoSubscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
+                        codeStr.contains("Subscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
+                        codeStr.contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
+                        codeStr.contains("License", ignoreCase = true) -> "NOT_LICENSED"
+                        else -> "CONNECTION_FAILED" // Generic connection error
                     }
-                    val error = RuntimeException("Failed to connect with code: ${connectRc.code}")
-                    Log.e(TAG, "Failed to connect: $currentError", error)
-                    isConnected = false
-                    sdkConnected = false
-                    lastDataReceivedAt = null
-                    onError(error)
-                    return@Thread
-                }
-                
-                Log.i(TAG, "Step 7: Checking sensor license")
-                // Check if sensor is licensed (per demo pattern - MainModel.java line 631)
-                val sensorProperties: ReturnObject<SensorProperties> = try {
-                    facade!!.getSensorProperties()
                 } catch (e: Exception) {
-                    Log.e(TAG, "CRITICAL: Exception getting sensor properties: ${e.message}", e)
-                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                    e.printStackTrace()
-                    // Disconnect if we can't get properties
-                    try {
-                        facade?.disconnectFromSensor()
-                    } catch (e2: Exception) {
-                        Log.w(TAG, "Error disconnecting after property check failure", e2)
-                    }
-                    currentError = "NOT_LICENSED"
-                    isConnected = false
-                    sdkConnected = false
-                    lastDataReceivedAt = null
-                    onError(RuntimeException("Failed to get sensor properties: ${e.message}", e))
-                    return@Thread
+                    "CONNECTION_FAILED" // Fallback
                 }
-                
-                if (sensorProperties.code != DriverReturnCode.Success) {
-                    Log.e(TAG, "Failed to get sensor properties with code: ${sensorProperties.code}")
-                    try {
-                        facade?.disconnectFromSensor()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error disconnecting after property check failure", e)
-                    }
-                    currentError = "NOT_LICENSED"
-                    isConnected = false
-                    sdkConnected = false
-                    lastDataReceivedAt = null
-                    onError(RuntimeException("Failed to get sensor properties"))
-                    return@Thread
-                }
-                
-                val sensorProps = try {
-                    sensorProperties.getReturnedObject()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error getting returned object from sensor properties: ${e.message}", e)
-                    null
-                }
-                
-                if (sensorProps == null) {
-                    Log.e(TAG, "Sensor properties returned object is null - disconnecting")
-                    try {
-                        facade?.disconnectFromSensor()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error disconnecting after null properties", e)
-                    }
-                    currentError = "NOT_LICENSED"
-                    isConnected = false
-                    sdkConnected = false
-                    lastDataReceivedAt = null
-                    onError(RuntimeException("Failed to get sensor properties object"))
-                    return@Thread
-                }
-                
-                val isLicensed = try {
-                    sensorProps.isLicensed()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error checking license status: ${e.message}", e)
-                    false
-                }
-                
-                // Log detailed license information
-                Log.i(TAG, "Sensor license check result: isLicensed=$isLicensed")
+                val error = RuntimeException("Failed to connect with code: ${connectRc.code}")
+                Log.e(TAG, "Failed to connect: $currentError", error)
+                isConnected = false
+                sdkConnected = false
+                lastDataReceivedAt = null
+                onError(error)
+                return@Thread
+            }
+            
+            Log.i(TAG, "Step 7: Checking sensor license")
+            // Check if sensor is licensed (per demo pattern - MainModel.java line 631)
+            val sensorProperties: ReturnObject<SensorProperties> = try {
+                facade!!.getSensorProperties()
+            } catch (e: Exception) {
+                Log.e(TAG, "CRITICAL: Exception getting sensor properties: ${e.message}", e)
+                Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                e.printStackTrace()
+                // Disconnect if we can't get properties
                 try {
-                    val instrumentName = sensorProps.getInstrumentName()
-                    val serialNumber = sensorProps.getSerialNumber()
-                    val firmware = sensorProps.getFirmware()
-                    Log.i(TAG, "Instrument details: Name=$instrumentName, Serial=$serialNumber, FW=$firmware")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not get instrument details: ${e.message}")
+                    facade?.disconnectFromSensor()
+                } catch (e2: Exception) {
+                    Log.w(TAG, "Error disconnecting after property check failure", e2)
                 }
-                
-                // Per demo (MainModel.java line 631-647): If not licensed, disconnect and return error
-                if (!isLicensed) {
-                    Log.e(TAG, "Sensor is not licensed - disconnecting (per demo pattern)")
-                    try {
-                        facade?.disconnectFromSensor()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error disconnecting unlicensed sensor", e)
-                    }
-                    currentError = "NOT_LICENSED"
-                    isConnected = false
-                    sdkConnected = false
-                    lastDataReceivedAt = null
-                    onError(RuntimeException("The instrument is not licensed"))
-                    return@Thread
-                }
-                
-                Log.i(TAG, "✓ Sensor is licensed")
-                
-                val instrumentInfo = try {
-                    "Instrument: ${sensorProps.getInstrumentName()}, " +
-                    "Serial: ${sensorProps.getSerialNumber()}, " +
-                    "FW: ${sensorProps.getFirmware()}"
-                } catch (e: Exception) {
-                    "Instrument info unavailable"
-                }
-                Log.i(TAG, instrumentInfo)
-                
-                Log.i(TAG, "Step 9: Adding event listener")
-                // Add event listener AFTER successful connection (per demo pattern - MainModel.java line 635)
+                currentError = "NOT_LICENSED"
+                isConnected = false
+                sdkConnected = false
+                lastDataReceivedAt = null
+                onError(RuntimeException("Failed to get sensor properties: ${e.message}", e))
+                return@Thread
+            }
+            
+            if (sensorProperties.code != DriverReturnCode.Success) {
+                Log.e(TAG, "Failed to get sensor properties with code: ${sensorProperties.code}")
                 try {
-                    facade!!.addCatalystEventListener(eventListener)
-                    Log.d(TAG, "Event listener added successfully")
+                    facade?.disconnectFromSensor()
                 } catch (e: Exception) {
-                    Log.e(TAG, "CRITICAL: Exception during addCatalystEventListener: ${e.message}", e)
-                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                    e.printStackTrace()
-                    // Disconnect if we can't add listener
-                    try {
-                        facade?.disconnectFromSensor()
-                    } catch (e2: Exception) {
-                        Log.w(TAG, "Error disconnecting after listener add failure", e2)
-                    }
-                    onError(e)
-                    return@Thread
+                    Log.w(TAG, "Error disconnecting after property check failure", e)
                 }
-                
-                Log.i(TAG, "Step 10: Setting position rate")
-                // Set position rate to 1Hz (per demo pattern - MainModel.java line 662)
-                val positionRateRc = try {
-                    facade!!.setOutputPositionRate(PositionRate.OneHz)
+                currentError = "NOT_LICENSED"
+                isConnected = false
+                sdkConnected = false
+                lastDataReceivedAt = null
+                onError(RuntimeException("Failed to get sensor properties"))
+                return@Thread
+            }
+            
+            val sensorProps = try {
+                sensorProperties.getReturnedObject()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting returned object from sensor properties: ${e.message}", e)
+                null
+            }
+            
+            if (sensorProps == null) {
+                Log.e(TAG, "Sensor properties returned object is null - disconnecting")
+                try {
+                    facade?.disconnectFromSensor()
                 } catch (e: Exception) {
-                    Log.w(TAG, "Exception setting position rate: ${e.message}", e)
-                    ReturnCode(DriverReturnCode.Error)
+                    Log.w(TAG, "Error disconnecting after null properties", e)
                 }
-                
-                if (positionRateRc.code != DriverReturnCode.Success) {
-                    Log.w(TAG, "Warning: Failed to set position rate (code: ${positionRateRc.code}) - continuing anyway")
-                } else {
-                    Log.i(TAG, "✓ Position rate set to 1Hz")
+                currentError = "NOT_LICENSED"
+                isConnected = false
+                sdkConnected = false
+                lastDataReceivedAt = null
+                onError(RuntimeException("Failed to get sensor properties object"))
+                return@Thread
+            }
+            
+            val isLicensed = try {
+                sensorProps.isLicensed()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking license status: ${e.message}", e)
+                false
+            }
+            
+            // Log detailed license information
+            Log.i(TAG, "Sensor license check result: isLicensed=$isLicensed")
+            try {
+                val instrumentName = sensorProps.getInstrumentName()
+                val serialNumber = sensorProps.getSerialNumber()
+                val firmware = sensorProps.getFirmware()
+                Log.i(TAG, "Instrument details: Name=$instrumentName, Serial=$serialNumber, FW=$firmware")
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not get instrument details: ${e.message}")
+            }
+            
+            // Per demo (MainModel.java line 631-647): If not licensed, disconnect and return error
+            if (!isLicensed) {
+                Log.e(TAG, "Sensor is not licensed - disconnecting (per demo pattern)")
+                try {
+                    facade?.disconnectFromSensor()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error disconnecting unlicensed sensor", e)
                 }
-                
-                sdkConnected = true
-                // Don't set isConnected = true yet - wait for actual data from receiver
-                currentError = null // Clear error on successful connection
-                Log.i(TAG, "=== SDK connected - waiting for receiver data... ===")
+                currentError = "NOT_LICENSED"
+                isConnected = false
+                sdkConnected = false
+                lastDataReceivedAt = null
+                onError(RuntimeException("The instrument is not licensed"))
+                return@Thread
+            }
+            
+            Log.i(TAG, "✓ Sensor is licensed")
+            
+            val instrumentInfo = try {
+                "Instrument: ${sensorProps.getInstrumentName()}, " +
+                "Serial: ${sensorProps.getSerialNumber()}, " +
+                "FW: ${sensorProps.getFirmware()}"
+            } catch (e: Exception) {
+                "Instrument info unavailable"
+            }
+            Log.i(TAG, instrumentInfo)
+            
+            Log.i(TAG, "Step 9: Adding event listener")
+            // Add event listener AFTER successful connection (per demo pattern - MainModel.java line 635)
+            try {
+                facade!!.addCatalystEventListener(eventListener)
+                Log.d(TAG, "Event listener added successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "CRITICAL: Exception during addCatalystEventListener: ${e.message}", e)
+                Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                e.printStackTrace()
+                // Disconnect if we can't add listener
+                try {
+                    facade?.disconnectFromSensor()
+                } catch (e2: Exception) {
+                    Log.w(TAG, "Error disconnecting after listener add failure", e2)
+                }
+                onError(e)
+                return@Thread
+            }
+            
+            Log.i(TAG, "Step 10: Setting position rate")
+            // Set position rate to 1Hz (per demo pattern - MainModel.java line 662)
+            val positionRateRc = try {
+                facade!!.setOutputPositionRate(PositionRate.OneHz)
+            } catch (e: Exception) {
+                Log.w(TAG, "Exception setting position rate: ${e.message}", e)
+                ReturnCode(DriverReturnCode.Error)
+            }
+            
+            if (positionRateRc.code != DriverReturnCode.Success) {
+                Log.w(TAG, "Warning: Failed to set position rate (code: ${positionRateRc.code}) - continuing anyway")
+            } else {
+                Log.i(TAG, "✓ Position rate set to 1Hz")
+            }
+            
+            sdkConnected = true
+            // Don't set isConnected = true yet - wait for actual data from receiver
+            currentError = null // Clear error on successful connection
+            Log.i(TAG, "=== SDK connected - waiting for receiver data... ===")
                 
             } catch (e: Exception) {
                 Log.e(TAG, "=== FATAL ERROR in Catalyst initialization ===", e)
