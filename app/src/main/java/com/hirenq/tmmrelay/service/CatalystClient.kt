@@ -255,133 +255,113 @@ class CatalystClient(
                 }
                 
                 Log.i(TAG, "Step 4: Force activation - Opening TMM login screen")
-                // THE FIX: Force activation inside YOUR app
-                // Per demo (MainActivity.java line 130-135): Launch TMM login Intent
-                // This opens the Trimble login UI
-                // User must log in with the same Trimble ID that owns the Catalyst subscription
-                // CRITICAL: We must wait for login to complete before loading subscription
-                try {
-                    Log.i(TAG, "Launching TMM login Intent...")
-                    
-                    // Check if TMM is installed first
-                    val tmmPackageName = "com.trimble.tmm"
-                    val packageManager = context.packageManager
-                    val tmmInstalled = try {
-                        packageManager.getPackageInfo(tmmPackageName, 0)
-                        true
+                // Per demo (MainActivity.java line 128-143): Launch TMM login Intent
+                // Demo flow:
+                // 1. Check if using TMM (we always use TMM)
+                // 2. Create Intent with action "com.trimble.tmm.LOGIN"
+                // 3. Add extras: applicationID, receiverName, noInstall
+                // 4. Call startActivityForResult() (we use startActivity() from Service)
+                // 5. Wait for result in onActivityResult() (we poll shared preferences)
+                // 6. Get accountTID from result Intent (we get from shared preferences)
+                // 7. Call beginLoadSubscription(userTID) (we call loadSubscriptionFromTrimbleMobileManager)
+                
+                // Per demo (MainActivity.java line 130-135): Create login Intent exactly as demo
+                val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
+                    putExtra("applicationID", appGuid)
+                    putExtra("receiverName", "Catalyst") // Per demo: getConfiguredReceiverName()
+                    putExtra("noInstall", false) // Per demo: !isCatalystDA1Selected(), we use false for Catalyst
+                    // Required flags for starting Activity from Service/background
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                
+                // Per demo (MainActivity.java line 134-139): Launch Intent and catch ActivityNotFoundException
+                // Use AtomicBoolean for thread-safe access
+                val loginLaunched = java.util.concurrent.atomic.AtomicBoolean(false)
+                val loginError = java.util.concurrent.atomic.AtomicReference<Exception?>(null)
+                
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    try {
+                        context.startActivity(loginIntent)
+                        Log.i(TAG, "✓ TMM login Intent launched successfully (per demo pattern)")
+                        Log.i(TAG, "User should log in with Trimble ID that owns the Catalyst subscription")
+                        loginLaunched.set(true)
+                    } catch (e: android.content.ActivityNotFoundException) {
+                        // Per demo (MainActivity.java line 136-138): Show error if TMM not installed
+                        Log.e(TAG, "TMM login Activity not found - TMM may not be installed")
+                        Log.e(TAG, "Per demo: Install Trimble Mobile Manager")
+                        loginError.set(e)
                     } catch (e: Exception) {
-                        Log.w(TAG, "TMM package not found: $tmmPackageName")
-                        false
+                        Log.e(TAG, "Unexpected error launching login Intent: ${e.message}", e)
+                        loginError.set(e)
                     }
+                }
+                
+                // Wait a moment for Intent to launch (Handler.post is asynchronous)
+                Thread.sleep(1000)
+                
+                // Check if there was an error launching the Intent
+                val error = loginError.get()
+                if (error != null) {
+                    Log.e(TAG, "Login Intent failed to launch: ${error.message}")
+                    currentError = "NO_SUBSCRIPTION"
+                    onError(RuntimeException("Install Trimble Mobile Manager", error))
+                    return@Thread
+                }
+                
+                // Check if Intent was launched successfully
+                if (!loginLaunched.get()) {
+                    Log.w(TAG, "Login Intent launch status unknown - continuing to wait for login")
+                    // Don't abort - the Intent might have launched but the flag wasn't set yet
+                    // We'll wait for login and check accountTID
+                }
+                
+                // Per demo (MainActivity.java line 285-291): Wait for login result
+                // Demo gets accountTID from result Intent in onActivityResult()
+                // Since we're in a Service, we poll shared preferences for accountTID
+                Log.i(TAG, "Waiting for user to complete login in TMM...")
+                Log.i(TAG, "Polling for accountTID (per demo: from result Intent, we use shared preferences)")
+                
+                var userTID: String? = null
+                val maxWaitTime = 120000L // 2 minutes (give user more time to login)
+                val pollInterval = 1000L // Check every 1 second
+                val startTime = System.currentTimeMillis()
+                
+                while (userTID == null && (System.currentTimeMillis() - startTime) < maxWaitTime) {
+                    Thread.sleep(pollInterval)
                     
-                    if (!tmmInstalled) {
-                        Log.e(TAG, "Trimble Mobile Manager (TMM) is not installed")
-                        Log.e(TAG, "Please install TMM from Google Play Store to use subscription login")
-                        currentError = "NO_SUBSCRIPTION"
-                        onError(RuntimeException("TMM is not installed. Please install Trimble Mobile Manager."))
-                        return@Thread
-                    }
-                    
-                    // Per demo (MainActivity.java line 130-135): Intent action is "com.trimble.tmm.LOGIN"
-                    // Must launch from main thread - use Handler
-                    val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
-                        // Explicitly set package name to ensure it goes to TMM
-                        setPackage(tmmPackageName)
-                        putExtra("applicationID", appGuid)
-                        putExtra("receiverName", "Catalyst") // Default receiver name
-                        putExtra("noInstall", false) // Per demo: !isCatalystDA1Selected(), we use false for Catalyst
-                        // Required flags for starting Activity from Service/background
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                        addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    }
-                    
-                    Log.d(TAG, "Login Intent details:")
-                    Log.d(TAG, "  Action: ${loginIntent.action}")
-                    Log.d(TAG, "  Package: ${loginIntent.`package`}")
-                    Log.d(TAG, "  ApplicationID: $appGuid")
-                    Log.d(TAG, "  ReceiverName: Catalyst")
-                    
-                    // Launch Intent on main thread (required for Activity start)
-                    // Use a CountDownLatch to ensure the Intent is launched before we continue
-                    val intentLaunched = java.util.concurrent.CountDownLatch(1)
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        try {
-                            context.startActivity(loginIntent)
-                            Log.i(TAG, "✓ TMM login Intent launched successfully")
-                            Log.i(TAG, "User should log in with Trimble ID that owns the Catalyst subscription")
-                            Log.i(TAG, "Waiting for login to complete...")
-                        } catch (e: android.content.ActivityNotFoundException) {
-                            Log.e(TAG, "TMM login Activity not found - TMM may not be installed or updated")
-                            Log.e(TAG, "Please install/update Trimble Mobile Manager (TMM) to use subscription login")
-                            currentError = "NO_SUBSCRIPTION"
-                            onError(RuntimeException("TMM login Activity not found. Please install/update TMM."))
-                        } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-                            Log.e(TAG, "TMM package not found: ${e.message}")
-                            currentError = "NO_SUBSCRIPTION"
-                            onError(RuntimeException("TMM is not installed. Please install Trimble Mobile Manager.", e))
-                        } catch (e: SecurityException) {
-                            Log.e(TAG, "Security exception launching TMM login: ${e.message}")
-                            Log.e(TAG, "This may be due to Android security restrictions")
-                            currentError = "NO_SUBSCRIPTION"
-                            onError(RuntimeException("Cannot launch TMM login: ${e.message}", e))
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to launch TMM login Intent: ${e.message}", e)
-                            Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                            currentError = "NO_SUBSCRIPTION"
-                            onError(RuntimeException("Failed to launch TMM login: ${e.message}", e))
-                        } finally {
-                            intentLaunched.countDown()
-                        }
-                    }
-                    
-                    // Wait a short time to ensure Intent is launched
-                    if (!intentLaunched.await(2, java.util.concurrent.TimeUnit.SECONDS)) {
-                        Log.w(TAG, "Intent launch timeout - continuing anyway")
-                    }
-                    
-                    // Wait for login to complete - poll TMM preferences for accountTID
-                    Log.i(TAG, "Waiting for user to complete login...")
-                    Log.i(TAG, "Polling TMM preferences for accountTID (max 60 seconds)...")
-                    
-                    var userTID: String? = null
-                    val maxWaitTime = 60000L // 60 seconds
-                    val pollInterval = 1000L // Check every 1 second
-                    val startTime = System.currentTimeMillis()
-                    
-                    while (userTID == null && (System.currentTimeMillis() - startTime) < maxWaitTime) {
-                        Thread.sleep(pollInterval)
+                    try {
+                        // Per demo (MainActivity.java line 287): Get accountTID from result
+                        // We check shared preferences since we can't get Intent result in Service
+                        val tmmPrefs = context.getSharedPreferences("com.trimble.tmm_preferences", Context.MODE_PRIVATE)
+                        val accountTID = tmmPrefs.getString("accountTID", null) 
+                            ?: tmmPrefs.getString("userTID", null)
+                            ?: tmmPrefs.getString("account_id", null)
+                            ?: tmmPrefs.getString("user_id", null)
                         
-                        try {
-                            val tmmPrefs = context.getSharedPreferences("com.trimble.tmm_preferences", Context.MODE_PRIVATE)
-                            val accountTID = tmmPrefs.getString("accountTID", null) 
-                                ?: tmmPrefs.getString("userTID", null)
-                                ?: tmmPrefs.getString("account_id", null)
-                                ?: tmmPrefs.getString("user_id", null)
-                            
-                            if (accountTID != null && accountTID.isNotEmpty()) {
-                                userTID = accountTID
-                                Log.i(TAG, "✓ Login detected! Found accountTID: $accountTID")
-                                break
-                            }
-                        } catch (e: Exception) {
-                            Log.d(TAG, "Error checking TMM preferences: ${e.message}")
+                        if (accountTID != null && accountTID.isNotEmpty()) {
+                            userTID = accountTID
+                            Log.i(TAG, "✓ Login detected! Found accountTID: $accountTID (per demo: from result Intent)")
+                            break
                         }
-                        
-                        val elapsed = (System.currentTimeMillis() - startTime) / 1000
-                        if (elapsed % 5 == 0L) {
-                            Log.d(TAG, "Still waiting for login... (${elapsed}s elapsed)")
-                        }
+                    } catch (e: Exception) {
+                        Log.d(TAG, "Error checking TMM preferences: ${e.message}")
                     }
                     
-                    if (userTID == null) {
-                        Log.e(TAG, "Login timeout - userTID not found after 60 seconds")
-                        Log.e(TAG, "Subscription loading failed: userTID required for TMM subscription")
-                        Log.e(TAG, "Please ensure you are logged in to TMM and try again")
-                        currentError = "NO_SUBSCRIPTION"
-                        onError(RuntimeException("Loading Subscription Failed: Login timeout - userTID not found"))
-                        return@Thread
+                    val elapsed = (System.currentTimeMillis() - startTime) / 1000
+                    if (elapsed % 10 == 0L) {
+                        Log.d(TAG, "Still waiting for login... (${elapsed}s elapsed)")
                     }
+                }
+                
+                // Per demo (MainActivity.java line 286-291): Check if login was successful
+                if (userTID == null) {
+                    // Per demo (MainActivity.java line 290): If resultCode != RESULT_OK, userTID is null
+                    Log.e(TAG, "Login timeout or cancelled - userTID not found")
+                    Log.e(TAG, "Per demo: beginLoadSubscription(null) when login fails")
+                    currentError = "NO_SUBSCRIPTION"
+                    onError(RuntimeException("Loading Subscription Failed: Login timeout or cancelled"))
+                    return@Thread
+                }
                     
                     Log.i(TAG, "Step 5: Loading subscription")
                     // Per demo (MainModel.java line 491-522): loadSubscription(String userTID)
