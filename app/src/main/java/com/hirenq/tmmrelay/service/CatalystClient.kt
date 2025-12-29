@@ -117,7 +117,7 @@ class CatalystClient(
                 }
                 Log.d(TAG, "Satellites: count=$satellitesInView, total=${satellites.size}")
                 // Update telemetry if we have position
-                latestPosition?.let { this@CatalystClient.createAndSendTelemetry() }
+                latestPosition?.let { createAndSendTelemetry() }
             } catch (e: Exception) {
                 Log.e(TAG, "Error in onSatelliteUpdate: ${e.message}", e)
                 e.printStackTrace()
@@ -362,44 +362,44 @@ class CatalystClient(
                     onError(RuntimeException("Loading Subscription Failed: Login timeout or cancelled"))
                     return@Thread
                 }
-                    
-                    Log.i(TAG, "Step 5: Loading subscription")
-                    // Per demo (MainModel.java line 491-522): loadSubscription(String userTID)
-                    // Demo flow:
-                    // 1. If userTID is null, return error (line 492-502) - already checked above
-                    // 2. If usedSubscriptionType == SubscriptionTypes.User, call loadSubscriptionFromTrimbleMobileManager(userTID) (line 508)
-                    // 3. Otherwise call loadSubscription() (line 521)
-                    // Since subscription is ACTIVE in TMM, we use User subscription type
-                    // userTID is now available from successful login
-                    
-                    // Per demo (MainModel.java line 507-508): Use loadSubscriptionFromTrimbleMobileManager for User subscription type
-                    val loadRc = try {
-                        Log.i(TAG, "Loading subscription from TMM with userTID: $userTID")
-                        facade!!.loadSubscriptionFromTrimbleMobileManager(userTID)
-                    } catch (e: NoSuchMethodException) {
-                        // Method doesn't exist - fall back to standard method
-                        Log.w(TAG, "loadSubscriptionFromTrimbleMobileManager not available, trying standard method...")
+                
+                Log.i(TAG, "Step 5: Loading subscription")
+                // Per demo (MainModel.java line 491-522): loadSubscription(String userTID)
+                // Demo flow:
+                // 1. If userTID is null, return error (line 492-502) - already checked above
+                // 2. If usedSubscriptionType == SubscriptionTypes.User, call loadSubscriptionFromTrimbleMobileManager(userTID) (line 508)
+                // 3. Otherwise call loadSubscription() (line 521)
+                // Since subscription is ACTIVE in TMM, we use User subscription type
+                // userTID is now available from successful login
+                
+                // Per demo (MainModel.java line 507-508): Use loadSubscriptionFromTrimbleMobileManager for User subscription type
+                val loadRc = try {
+                    Log.i(TAG, "Loading subscription from TMM with userTID: $userTID")
+                    facade!!.loadSubscriptionFromTrimbleMobileManager(userTID)
+                } catch (e: NoSuchMethodException) {
+                    // Method doesn't exist - fall back to standard method
+                    Log.w(TAG, "loadSubscriptionFromTrimbleMobileManager not available, trying standard method...")
+                    facade!!.loadSubscription()
+                } catch (e: Exception) {
+                    Log.e(TAG, "CRITICAL: Exception during loadSubscriptionFromTrimbleMobileManager: ${e.message}", e)
+                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                    e.printStackTrace()
+                    // Try standard method as fallback
+                    try {
+                        Log.i(TAG, "Trying fallback: standard loadSubscription()...")
                         facade!!.loadSubscription()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "CRITICAL: Exception during loadSubscriptionFromTrimbleMobileManager: ${e.message}", e)
-                        Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                        e.printStackTrace()
-                        // Try standard method as fallback
-                        try {
-                            Log.i(TAG, "Trying fallback: standard loadSubscription()...")
-                            facade!!.loadSubscription()
-                        } catch (e2: Exception) {
-                            Log.e(TAG, "Both subscription load methods failed", e2)
-                            currentError = "NO_SUBSCRIPTION"
-                            onError(e2)
-                            return@Thread
-                        }
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "Both subscription load methods failed", e2)
+                        currentError = "NO_SUBSCRIPTION"
+                        onError(e2)
+                        return@Thread
                     }
-                    
-                    Log.i(TAG, "Load subscription return code: ${loadRc.code}")
-                    Log.i(TAG, "Return code details: ${loadRc.code.toString()}")
-                    
-                    if (loadRc.code != DriverReturnCode.Success) {
+                }
+                
+                Log.i(TAG, "Load subscription return code: ${loadRc.code}")
+                Log.i(TAG, "Return code details: ${loadRc.code.toString()}")
+                
+                if (loadRc.code != DriverReturnCode.Success) {
                     // Map return code to specific error - check enum values safely
                     val codeStr = loadRc.code.toString()
                     currentError = try {
@@ -425,13 +425,13 @@ class CatalystClient(
                     Log.e(TAG, "  2. Trimble Mobile Manager (TMM) is not installed or not running")
                     Log.e(TAG, "  3. Subscription file is missing or invalid")
                     Log.e(TAG, "  4. License has expired")
-                        onError(error)
-                        return@Thread
-                    }
-                    currentError = null // Clear error on success
-                    Log.i(TAG, "✓ Subscription loaded successfully")
-                    
-                    Log.i(TAG, "Step 6: Verifying subscription programmatically")
+                    onError(error)
+                    return@Thread
+                }
+                currentError = null // Clear error on success
+                Log.i(TAG, "✓ Subscription loaded successfully")
+                
+                Log.i(TAG, "Step 6: Verifying subscription programmatically")
                 // Verify subscription immediately after loadSubscription()
                 // Should see: Active, Valid, Non-expired
                 try {
@@ -670,7 +670,7 @@ class CatalystClient(
                 try {
                     facade!!.addCatalystEventListener(eventListener)
                     Log.d(TAG, "Event listener added successfully")
-        } catch (e: Exception) {
+                } catch (e: Exception) {
                     Log.e(TAG, "CRITICAL: Exception during addCatalystEventListener: ${e.message}", e)
                     Log.e(TAG, "Exception type: ${e.javaClass.name}")
                     e.printStackTrace()
@@ -680,7 +680,7 @@ class CatalystClient(
                     } catch (e2: Exception) {
                         Log.w(TAG, "Error disconnecting after listener add failure", e2)
                     }
-            onError(e)
+                    onError(e)
                     return@Thread
                 }
                 
