@@ -48,7 +48,7 @@ object ApiClient {
             put("DeviceId", payload.deviceId)
             put("Latitude", payload.latitude)
             put("Longitude", payload.longitude)
-            put("Battery", payload.battery)
+            put("Battery", payload.battery) // Mobile device battery
             put("FixType", payload.fixType)
             put("Timestamp", timestamp)
             put("CurrentTimestamp", currentTimestamp)
@@ -62,14 +62,21 @@ object ApiClient {
             payload.userName?.let { put("UserName", it) }
             payload.userEmail?.let { put("UserEmail", it) }
             
-            // Optional receiver details
+            // Optional Trimble receiver details
             payload.receiverBattery?.let { put("ReceiverBattery", it) }
             payload.receiverHealth?.let { put("ReceiverHealth", it) }
             
-            // Optional DOP values
+            // Optional DOP values (from Trimble receiver)
             payload.pdop?.let { put("PDOP", it) }
             payload.hdop?.let { put("HDOP", it) }
             payload.vdop?.let { put("VDOP", it) }
+            
+            // Mobile GPS data (always included when available)
+            payload.mobileLatitude?.let { put("MobileLatitude", it) }
+            payload.mobileLongitude?.let { put("MobileLongitude", it) }
+            payload.mobileAccuracy?.let { put("MobileAccuracy", it) }
+            payload.mobileBattery?.let { put("MobileBattery", it) }
+            payload.dataSource?.let { put("DataSource", it) }
         }
 
         val jsonString = json.toString()
@@ -81,7 +88,10 @@ object ApiClient {
                 "HAcc=${payload.horizontalAccuracy}, VAcc=${payload.verticalAccuracy}, " +
                 "Satellites=${payload.satellites}, ReceiverBattery=${payload.receiverBattery}, " +
                 "ReceiverHealth=${payload.receiverHealth}, PDOP=${payload.pdop}, " +
-                "HDOP=${payload.hdop}, VDOP=${payload.vdop}")
+                "HDOP=${payload.hdop}, VDOP=${payload.vdop}, " +
+                "MobileLat=${payload.mobileLatitude}, MobileLng=${payload.mobileLongitude}, " +
+                "MobileAcc=${payload.mobileAccuracy}, MobileBattery=${payload.mobileBattery}, " +
+                "DataSource=${payload.dataSource}")
 
         val body = jsonString.toRequestBody("application/json".toMediaType())
 

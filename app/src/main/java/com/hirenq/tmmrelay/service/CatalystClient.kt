@@ -820,7 +820,13 @@ class CatalystClient(
                 pdop = if (pdopValue.isNaN() || pdopValue.isInfinite()) null else pdopValue,
                 hdop = if (hdopValue.isNaN() || hdopValue.isInfinite()) null else hdopValue,
                 vdop = if (vdopValue.isNaN() || vdopValue.isInfinite()) null else vdopValue,
-                receiverHealth = receiverHealth
+                receiverHealth = receiverHealth,
+                // Mobile GPS data will be added by TmmRelayService
+                mobileLatitude = null,
+                mobileLongitude = null,
+                mobileAccuracy = null,
+                mobileBattery = null,
+                dataSource = "TRIMBLE" // This payload is from Trimble receiver
             )
             
             onMessage(payload)

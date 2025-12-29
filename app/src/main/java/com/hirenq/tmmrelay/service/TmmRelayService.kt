@@ -68,6 +68,29 @@ class TmmRelayService : Service() {
             ) == PackageManager.PERMISSION_GRANTED
         else true
 
+    // -------------------- HELPER FUNCTIONS --------------------
+    
+    // Enrich payload with mobile GPS data
+    private fun enrichPayloadWithMobileGps(payload: TelemetryPayload): TelemetryPayload {
+        val mobileBattery = DeviceInfoUtil.batteryLevel(this)
+        val dataSource = if (catalystClient?.getConnectionStatus() == true && 
+                             (payload.latitude != 0.0 || payload.longitude != 0.0)) {
+            "TRIMBLE"
+        } else if (mobileLatitude != 0.0 || mobileLongitude != 0.0) {
+            "MOBILE_GPS"
+        } else {
+            null
+        }
+        
+        return payload.copy(
+            mobileLatitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLatitude else null,
+            mobileLongitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLongitude else null,
+            mobileAccuracy = if (mobileAccuracy > 0) mobileAccuracy else null,
+            mobileBattery = mobileBattery,
+            dataSource = dataSource
+        )
+    }
+
     // -------------------- DIAGNOSTICS BROADCAST --------------------
 
     private fun broadcastDiagnostics(payload: TelemetryPayload) {
@@ -166,18 +189,32 @@ class TmmRelayService : Service() {
                     mobileAccuracy
                 }
                 
+                val mobileBattery = DeviceInfoUtil.batteryLevel(this@TmmRelayService)
+                val dataSource = if (isTrimbleConnected && (latitude != 0.0 || longitude != 0.0)) {
+                    "TRIMBLE"
+                } else if (mobileLatitude != 0.0 || mobileLongitude != 0.0) {
+                    "MOBILE_GPS"
+                } else {
+                    null
+                }
+                
                 val payload = TelemetryPayload(
                     tenantId = tenantId,
                     deviceId = DeviceInfoUtil.deviceId(this@TmmRelayService),
                     latitude = latitude,
                     longitude = longitude,
-                    battery = DeviceInfoUtil.batteryLevel(this@TmmRelayService),
+                    battery = mobileBattery,
                     fixType = fixType,
                     timestamp = Instant.now().toString(),
                     health = if (isTrimbleConnected) "OK" else if (mobileLatitude != 0.0 || mobileLongitude != 0.0) "MOBILE_GPS_ONLY" else "OK",
                     horizontalAccuracy = accuracy,
                     verticalAccuracy = -1.0,
-                    satellites = -1
+                    satellites = -1,
+                    mobileLatitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLatitude else null,
+                    mobileLongitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLongitude else null,
+                    mobileAccuracy = if (mobileAccuracy > 0) mobileAccuracy else null,
+                    mobileBattery = mobileBattery,
+                    dataSource = dataSource
                 )
                 broadcastDiagnostics(payload)
             }
@@ -228,10 +265,16 @@ class TmmRelayService : Service() {
                         "Battery=${payload.battery}, FixType=${payload.fixType}, " +
                         "Health=${payload.health}, HAcc=${payload.horizontalAccuracy}, " +
                         "VAcc=${payload.verticalAccuracy}, Satellites=${payload.satellites}, " +
-                        "ReceiverBattery=${payload.receiverBattery}, ReceiverHealth=${payload.receiverHealth}")
+                        "ReceiverBattery=${payload.receiverBattery}, ReceiverHealth=${payload.receiverHealth}, " +
+                        "MobileLat=${payload.mobileLatitude}, MobileLng=${payload.mobileLongitude}, " +
+                        "MobileAcc=${payload.mobileAccuracy}, MobileBattery=${payload.mobileBattery}, " +
+                        "DataSource=${payload.dataSource}")
+                
+                // Enrich payload with mobile GPS data before sending
+                val enrichedPayload = enrichPayloadWithMobileGps(payload.copy(deviceId = deviceId))
                 
                 ApiClient.send(
-                    payload.copy(deviceId = deviceId),
+                    enrichedPayload,
                     apiKey
                 ) { timestamp, payloadInfo, success ->
                     android.util.Log.i("TmmRelayService", "POST response: $timestamp - $payloadInfo (success=$success)")
@@ -315,18 +358,24 @@ class TmmRelayService : Service() {
         }
 
         // Send initial diagnostics broadcast
+        val mobileBattery = DeviceInfoUtil.batteryLevel(this)
         val initialPayload = TelemetryPayload(
             tenantId = tenantId,
             deviceId = deviceId,
             latitude = 0.0,
             longitude = 0.0,
-            battery = DeviceInfoUtil.batteryLevel(this),
+            battery = mobileBattery,
             fixType = "UNKNOWN",
             timestamp = Instant.now().toString(),
             health = "OK",
             horizontalAccuracy = -1.0,
             verticalAccuracy = -1.0,
-            satellites = -1
+            satellites = -1,
+            mobileLatitude = null,
+            mobileLongitude = null,
+            mobileAccuracy = null,
+            mobileBattery = mobileBattery,
+            dataSource = null
         )
         broadcastDiagnostics(initialPayload)
 
@@ -363,35 +412,56 @@ class TmmRelayService : Service() {
     // -------------------- POSTS --------------------
 
     private fun emitOffline() {
+        val mobileBattery = DeviceInfoUtil.batteryLevel(this)
         val payload = TelemetryPayload(
             tenantId = tenantId,
             deviceId = DeviceInfoUtil.deviceId(this),
             latitude = 0.0,
             longitude = 0.0,
-            battery = DeviceInfoUtil.batteryLevel(this),
+            battery = mobileBattery,
             fixType = "UNKNOWN",
             timestamp = Instant.now().toString(),
             health = "OFFLINE",
             horizontalAccuracy = -1.0,
             verticalAccuracy = -1.0,
-            satellites = -1
+            satellites = -1,
+            mobileLatitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLatitude else null,
+            mobileLongitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLongitude else null,
+            mobileAccuracy = if (mobileAccuracy > 0) mobileAccuracy else null,
+            mobileBattery = mobileBattery,
+            dataSource = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) "MOBILE_GPS" else null
         )
         broadcastDiagnostics(payload)
     }
 
     private fun sendPeriodicPost() {
+        val mobileBattery = DeviceInfoUtil.batteryLevel(this)
+        val isTrimbleConnected = catalystClient?.getConnectionStatus() ?: false
+        val dataSource = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+            "TRIMBLE"
+        } else if (mobileLatitude != 0.0 || mobileLongitude != 0.0) {
+            "MOBILE_GPS"
+        } else {
+            null
+        }
+        
         val payload = TelemetryPayload(
             tenantId = tenantId,
             deviceId = DeviceInfoUtil.deviceId(this),
             latitude = lastKnownLatitude,
             longitude = lastKnownLongitude,
-            battery = DeviceInfoUtil.batteryLevel(this),
+            battery = mobileBattery,
             fixType = lastKnownFixType,
             timestamp = Instant.now().toString(),
             health = "OK",
             horizontalAccuracy = -1.0,
             verticalAccuracy = -1.0,
-            satellites = -1
+            satellites = -1,
+            mobileLatitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLatitude else null,
+            mobileLongitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLongitude else null,
+            mobileAccuracy = if (mobileAccuracy > 0) mobileAccuracy else null,
+            mobileBattery = mobileBattery,
+            dataSource = dataSource
         )
         broadcastDiagnostics(payload)
     }
@@ -433,12 +503,21 @@ class TmmRelayService : Service() {
             mobileAccuracy
         }
         
+        val mobileBattery = DeviceInfoUtil.batteryLevel(this)
+        val dataSource = if (isTrimbleConnected && (latitude != 0.0 || longitude != 0.0)) {
+            "TRIMBLE"
+        } else if (mobileLatitude != 0.0 || mobileLongitude != 0.0) {
+            "MOBILE_GPS"
+        } else {
+            null
+        }
+        
         val payload = TelemetryPayload(
             tenantId = tenantId,
             deviceId = deviceId,
             latitude = latitude,
             longitude = longitude,
-            battery = DeviceInfoUtil.batteryLevel(this), // Mobile battery
+            battery = mobileBattery, // Mobile battery
             fixType = fixType,
             timestamp = Instant.now().toString(),
             health = if (isTrimbleConnected) "OK" else "MOBILE_GPS_ONLY",
@@ -446,13 +525,21 @@ class TmmRelayService : Service() {
             verticalAccuracy = -1.0,
             satellites = -1,
             receiverBattery = null, // No receiver battery when using mobile GPS
-            receiverHealth = null
+            receiverHealth = null,
+            mobileLatitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLatitude else null,
+            mobileLongitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLongitude else null,
+            mobileAccuracy = if (mobileAccuracy > 0) mobileAccuracy else null,
+            mobileBattery = mobileBattery,
+            dataSource = dataSource
         )
         
         android.util.Log.i("TmmRelayService", "=== Sending POST with ${if (isTrimbleConnected) "Trimble" else "Mobile GPS"} data ===")
         android.util.Log.i("TmmRelayService", "Payload: TenantId=$tenantId, DeviceId=$deviceId, " +
                 "Lat=$latitude, Lng=$longitude, Battery=${payload.battery}, " +
-                "FixType=$fixType, Health=${payload.health}, HAcc=$horizontalAccuracy")
+                "FixType=$fixType, Health=${payload.health}, HAcc=$horizontalAccuracy, " +
+                "MobileLat=${payload.mobileLatitude}, MobileLng=${payload.mobileLongitude}, " +
+                "MobileAcc=${payload.mobileAccuracy}, MobileBattery=${payload.mobileBattery}, " +
+                "DataSource=${payload.dataSource}")
         
         // Check if we should send POST (every 5 minutes)
         val shouldSendPost =
