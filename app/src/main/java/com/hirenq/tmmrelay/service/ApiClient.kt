@@ -41,9 +41,10 @@ object ApiClient {
             .atZone(ZoneId.of("Asia/Kolkata"))
             .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX"))
 
-        // Include all fields from TelemetryPayload in the POST request
+        // Include ALL fields from TelemetryPayload in the POST request
+        // Always include all fields with their actual values
         val json = JSONObject().apply {
-            // Required fields
+            // Required fields - ALWAYS include
             put("TenantId", payload.tenantId)
             put("DeviceId", payload.deviceId)
             put("Latitude", payload.latitude)
@@ -57,26 +58,26 @@ object ApiClient {
             put("VerticalAccuracy", payload.verticalAccuracy)
             put("Satellites", payload.satellites)
             
-            // Optional user details
-            payload.userId?.let { put("UserId", it) }
-            payload.userName?.let { put("UserName", it) }
-            payload.userEmail?.let { put("UserEmail", it) }
+            // Optional user details - always include
+            put("UserId", payload.userId ?: JSONObject.NULL)
+            put("UserName", payload.userName ?: JSONObject.NULL)
+            put("UserEmail", payload.userEmail ?: JSONObject.NULL)
             
-            // Optional Trimble receiver details
-            payload.receiverBattery?.let { put("ReceiverBattery", it) }
-            payload.receiverHealth?.let { put("ReceiverHealth", it) }
+            // Optional Trimble receiver details - always include
+            put("ReceiverBattery", payload.receiverBattery ?: JSONObject.NULL)
+            put("ReceiverHealth", payload.receiverHealth ?: JSONObject.NULL)
             
-            // Optional DOP values (from Trimble receiver)
-            payload.pdop?.let { put("PDOP", it) }
-            payload.hdop?.let { put("HDOP", it) }
-            payload.vdop?.let { put("VDOP", it) }
+            // Optional DOP values (from Trimble receiver) - always include
+            put("PDOP", payload.pdop ?: JSONObject.NULL)
+            put("HDOP", payload.hdop ?: JSONObject.NULL)
+            put("VDOP", payload.vdop ?: JSONObject.NULL)
             
-            // Mobile GPS data (always included when available)
-            payload.mobileLatitude?.let { put("MobileLatitude", it) }
-            payload.mobileLongitude?.let { put("MobileLongitude", it) }
-            payload.mobileAccuracy?.let { put("MobileAccuracy", it) }
-            payload.mobileBattery?.let { put("MobileBattery", it) }
-            payload.dataSource?.let { put("DataSource", it) }
+            // Mobile GPS data - ALWAYS include
+            put("MobileLatitude", payload.mobileLatitude ?: JSONObject.NULL)
+            put("MobileLongitude", payload.mobileLongitude ?: JSONObject.NULL)
+            put("MobileAccuracy", payload.mobileAccuracy ?: JSONObject.NULL)
+            put("MobileBattery", payload.mobileBattery ?: JSONObject.NULL)
+            put("DataSource", payload.dataSource ?: JSONObject.NULL)
         }
 
         val jsonString = json.toString()
