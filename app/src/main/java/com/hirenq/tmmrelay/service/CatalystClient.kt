@@ -262,28 +262,82 @@ class CatalystClient(
                 // CRITICAL: We must wait for login to complete before loading subscription
                 try {
                     Log.i(TAG, "Launching TMM login Intent...")
-                    // Per demo: Intent action is "com.trimble.tmm.LOGIN"
+                    
+                    // Check if TMM is installed first
+                    val tmmPackageName = "com.trimble.tmm"
+                    val packageManager = context.packageManager
+                    val tmmInstalled = try {
+                        packageManager.getPackageInfo(tmmPackageName, 0)
+                        true
+                    } catch (e: Exception) {
+                        Log.w(TAG, "TMM package not found: $tmmPackageName")
+                        false
+                    }
+                    
+                    if (!tmmInstalled) {
+                        Log.e(TAG, "Trimble Mobile Manager (TMM) is not installed")
+                        Log.e(TAG, "Please install TMM from Google Play Store to use subscription login")
+                        currentError = "NO_SUBSCRIPTION"
+                        onError(RuntimeException("TMM is not installed. Please install Trimble Mobile Manager."))
+                        return@Thread
+                    }
+                    
+                    // Per demo (MainActivity.java line 130-135): Intent action is "com.trimble.tmm.LOGIN"
                     // Must launch from main thread - use Handler
                     val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
+                        // Explicitly set package name to ensure it goes to TMM
+                        setPackage(tmmPackageName)
                         putExtra("applicationID", appGuid)
                         putExtra("receiverName", "Catalyst") // Default receiver name
                         putExtra("noInstall", false) // Per demo: !isCatalystDA1Selected(), we use false for Catalyst
+                        // Required flags for starting Activity from Service/background
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                        addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     }
                     
+                    Log.d(TAG, "Login Intent details:")
+                    Log.d(TAG, "  Action: ${loginIntent.action}")
+                    Log.d(TAG, "  Package: ${loginIntent.`package`}")
+                    Log.d(TAG, "  ApplicationID: $appGuid")
+                    Log.d(TAG, "  ReceiverName: Catalyst")
+                    
                     // Launch Intent on main thread (required for Activity start)
+                    // Use a CountDownLatch to ensure the Intent is launched before we continue
+                    val intentLaunched = java.util.concurrent.CountDownLatch(1)
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         try {
                             context.startActivity(loginIntent)
                             Log.i(TAG, "✓ TMM login Intent launched successfully")
                             Log.i(TAG, "User should log in with Trimble ID that owns the Catalyst subscription")
+                            Log.i(TAG, "Waiting for login to complete...")
                         } catch (e: android.content.ActivityNotFoundException) {
-                            Log.e(TAG, "TMM login Activity not found - TMM may not be installed")
-                            Log.e(TAG, "Please install Trimble Mobile Manager (TMM) to use subscription login")
+                            Log.e(TAG, "TMM login Activity not found - TMM may not be installed or updated")
+                            Log.e(TAG, "Please install/update Trimble Mobile Manager (TMM) to use subscription login")
+                            currentError = "NO_SUBSCRIPTION"
+                            onError(RuntimeException("TMM login Activity not found. Please install/update TMM."))
+                        } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
+                            Log.e(TAG, "TMM package not found: ${e.message}")
+                            currentError = "NO_SUBSCRIPTION"
+                            onError(RuntimeException("TMM is not installed. Please install Trimble Mobile Manager.", e))
+                        } catch (e: SecurityException) {
+                            Log.e(TAG, "Security exception launching TMM login: ${e.message}")
+                            Log.e(TAG, "This may be due to Android security restrictions")
+                            currentError = "NO_SUBSCRIPTION"
+                            onError(RuntimeException("Cannot launch TMM login: ${e.message}", e))
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to launch TMM login Intent: ${e.message}", e)
+                            Log.e(TAG, "Exception type: ${e.javaClass.name}")
+                            currentError = "NO_SUBSCRIPTION"
+                            onError(RuntimeException("Failed to launch TMM login: ${e.message}", e))
+                        } finally {
+                            intentLaunched.countDown()
                         }
+                    }
+                    
+                    // Wait a short time to ensure Intent is launched
+                    if (!intentLaunched.await(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                        Log.w(TAG, "Intent launch timeout - continuing anyway")
                     }
                     
                     // Wait for login to complete - poll TMM preferences for accountTID
