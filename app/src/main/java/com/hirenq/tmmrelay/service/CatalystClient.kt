@@ -703,8 +703,8 @@ class CatalystClient(
             // Don't set isConnected = true yet - wait for actual data from receiver
             currentError = null // Clear error on successful connection
             Log.i(TAG, "=== SDK connected - waiting for receiver data... ===")
-                
-            } catch (e: Exception) {
+            
+        } catch (e: Exception) {
                 Log.e(TAG, "=== FATAL ERROR in Catalyst initialization ===", e)
                 Log.e(TAG, "Exception type: ${e.javaClass.name}")
                 Log.e(TAG, "Exception message: ${e.message}")
