@@ -18,13 +18,16 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.hirenq.tmmrelay.R
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
+import com.hirenq.tmmrelay.util.LocationManagerUtil
 import com.hirenq.tmmrelay.util.TrimbleLicensingUtil
+import android.location.Location
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 class TmmRelayService : Service() {
 
     private var catalystClient: CatalystClient? = null
+    private var locationManagerUtil: LocationManagerUtil? = null
     private val tenantId = "ASSAM_LAND_REGISTRY"
     private val apiKey: String? = null
 
@@ -35,9 +38,15 @@ class TmmRelayService : Service() {
     private var lastPostTimestamp: String? = null
     private var lastPostPayload: String? = null
 
+    // Trimble receiver data (when available)
     private var lastKnownLatitude = 0.0
     private var lastKnownLongitude = 0.0
     private var lastKnownFixType = "UNKNOWN"
+    
+    // Mobile GPS data (always available if location permission granted)
+    private var mobileLatitude = 0.0
+    private var mobileLongitude = 0.0
+    private var mobileAccuracy = -1.0
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -99,10 +108,25 @@ class TmmRelayService : Service() {
 
     private val periodicPostCheck = object : Runnable {
         override fun run() {
-            if (isRelayStarted && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
-                sendPeriodicPost()
+            if (isRelayStarted) {
+                // Send POST with mobile GPS data even if Trimble is not connected
+                sendMobileGpsPost()
             }
             handler.postDelayed(this, TimeUnit.MINUTES.toMillis(5))
+        }
+    }
+    
+    // Periodic task to send mobile GPS data even when Trimble is not connected
+    private val mobileGpsPostCheck = object : Runnable {
+        override fun run() {
+            if (isRelayStarted) {
+                // Send mobile GPS data every 2 minutes if Trimble is not connected
+                val isTrimbleConnected = catalystClient?.getConnectionStatus() ?: false
+                if (!isTrimbleConnected && (mobileLatitude != 0.0 || mobileLongitude != 0.0)) {
+                    sendMobileGpsPost()
+                }
+            }
+            handler.postDelayed(this, TimeUnit.MINUTES.toMillis(2))
         }
     }
 
@@ -117,16 +141,41 @@ class TmmRelayService : Service() {
         override fun run() {
             if (isRelayStarted) {
                 // Broadcast diagnostics periodically even if no messages received
+                // Use Trimble data if available, otherwise use mobile GPS
+                val isTrimbleConnected = catalystClient?.getConnectionStatus() ?: false
+                val latitude = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+                    lastKnownLatitude
+                } else {
+                    mobileLatitude
+                }
+                val longitude = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+                    lastKnownLongitude
+                } else {
+                    mobileLongitude
+                }
+                val fixType = if (isTrimbleConnected && lastKnownFixType != "UNKNOWN") {
+                    lastKnownFixType
+                } else if (mobileLatitude != 0.0 || mobileLongitude != 0.0) {
+                    "MOBILE_GPS"
+                } else {
+                    "UNKNOWN"
+                }
+                val accuracy = if (isTrimbleConnected && lastKnownLatitude != 0.0) {
+                    -1.0 // Will be set from Trimble payload if available
+                } else {
+                    mobileAccuracy
+                }
+                
                 val payload = TelemetryPayload(
                     tenantId = tenantId,
                     deviceId = DeviceInfoUtil.deviceId(this@TmmRelayService),
-                    latitude = lastKnownLatitude,
-                    longitude = lastKnownLongitude,
+                    latitude = latitude,
+                    longitude = longitude,
                     battery = DeviceInfoUtil.batteryLevel(this@TmmRelayService),
-                    fixType = lastKnownFixType,
+                    fixType = fixType,
                     timestamp = Instant.now().toString(),
-                    health = "OK",
-                    horizontalAccuracy = -1.0,
+                    health = if (isTrimbleConnected) "OK" else if (mobileLatitude != 0.0 || mobileLongitude != 0.0) "MOBILE_GPS_ONLY" else "OK",
+                    horizontalAccuracy = accuracy,
                     verticalAccuracy = -1.0,
                     satellites = -1
                 )
@@ -226,19 +275,37 @@ class TmmRelayService : Service() {
             createNotificationChannel()
             android.util.Log.i("TmmRelayService", "Step 4: Notification channel created")
             
+            // Initialize mobile GPS location tracking
+            android.util.Log.i("TmmRelayService", "Step 5: Initializing mobile GPS location tracking")
+            locationManagerUtil = LocationManagerUtil(this)
+            if (locationManagerUtil?.hasLocationPermission() == true) {
+                locationManagerUtil?.startLocationUpdates(
+                    minTimeMs = 5000, // Update every 5 seconds
+                    minDistanceM = 10f // Update if moved 10 meters
+                ) { location ->
+                    mobileLatitude = location.latitude
+                    mobileLongitude = location.longitude
+                    mobileAccuracy = location.accuracy.toDouble()
+                    android.util.Log.d("TmmRelayService", "Mobile GPS updated: lat=$mobileLatitude, lon=$mobileLongitude, acc=$mobileAccuracy")
+                }
+                android.util.Log.i("TmmRelayService", "Step 5: Mobile GPS location tracking started")
+            } else {
+                android.util.Log.w("TmmRelayService", "Step 5: Location permission not granted - mobile GPS tracking disabled")
+            }
+            
             isRelayStarted = true
 
-            android.util.Log.i("TmmRelayService", "Step 5: Starting foreground service")
+            android.util.Log.i("TmmRelayService", "Step 6: Starting foreground service")
             startForeground(
                 NOTIFICATION_ID,
                 buildNotification("Started")
             )
-            android.util.Log.i("TmmRelayService", "Step 5: Foreground service started")
+            android.util.Log.i("TmmRelayService", "Step 6: Foreground service started")
 
             // Connect Catalyst client
-            android.util.Log.i("TmmRelayService", "Step 6: Connecting Catalyst client")
+            android.util.Log.i("TmmRelayService", "Step 7: Connecting Catalyst client")
             catalystClient?.connect(tenantId, deviceId)
-            android.util.Log.i("TmmRelayService", "Step 6: Catalyst connect() called")
+            android.util.Log.i("TmmRelayService", "Step 7: Catalyst connect() called")
             
         } catch (e: Exception) {
             android.util.Log.e("TmmRelayService", "CRITICAL ERROR in onCreate(): ${e.message}", e)
@@ -265,6 +332,7 @@ class TmmRelayService : Service() {
 
         handler.postDelayed(offlineCheck, TimeUnit.MINUTES.toMillis(1))
         handler.postDelayed(periodicPostCheck, TimeUnit.MINUTES.toMillis(5))
+        handler.postDelayed(mobileGpsPostCheck, TimeUnit.MINUTES.toMillis(2))
         handler.postDelayed(statusUpdateCheck, TimeUnit.SECONDS.toMillis(30))
         handler.postDelayed(diagnosticsUpdateCheck, TimeUnit.SECONDS.toMillis(10))
     }
@@ -277,6 +345,9 @@ class TmmRelayService : Service() {
 
     override fun onDestroy() {
         isRelayStarted = false
+        
+        // Stop location updates
+        locationManagerUtil?.stopLocationUpdates()
         
         // Close Catalyst client
         catalystClient?.close()
@@ -322,6 +393,90 @@ class TmmRelayService : Service() {
             verticalAccuracy = -1.0,
             satellites = -1
         )
+        broadcastDiagnostics(payload)
+    }
+    
+    // Send POST request with mobile GPS data (even when Trimble is not connected)
+    private fun sendMobileGpsPost() {
+        val deviceId = DeviceInfoUtil.deviceId(this)
+        val isTrimbleConnected = catalystClient?.getConnectionStatus() ?: false
+        
+        // Use Trimble data if available, otherwise use mobile GPS
+        val latitude = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+            lastKnownLatitude
+        } else {
+            mobileLatitude
+        }
+        
+        val longitude = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+            lastKnownLongitude
+        } else {
+            mobileLongitude
+        }
+        
+        // Only send if we have valid coordinates
+        if (latitude == 0.0 && longitude == 0.0) {
+            android.util.Log.d("TmmRelayService", "Skipping mobile GPS POST - no valid coordinates")
+            return
+        }
+        
+        val fixType = if (isTrimbleConnected && lastKnownFixType != "UNKNOWN") {
+            lastKnownFixType
+        } else {
+            "MOBILE_GPS"
+        }
+        
+        val horizontalAccuracy = if (isTrimbleConnected && lastKnownLatitude != 0.0) {
+            // Use Trimble accuracy if available
+            -1.0 // Will be set from Trimble payload if available
+        } else {
+            mobileAccuracy
+        }
+        
+        val payload = TelemetryPayload(
+            tenantId = tenantId,
+            deviceId = deviceId,
+            latitude = latitude,
+            longitude = longitude,
+            battery = DeviceInfoUtil.batteryLevel(this), // Mobile battery
+            fixType = fixType,
+            timestamp = Instant.now().toString(),
+            health = if (isTrimbleConnected) "OK" else "MOBILE_GPS_ONLY",
+            horizontalAccuracy = horizontalAccuracy,
+            verticalAccuracy = -1.0,
+            satellites = -1,
+            receiverBattery = null, // No receiver battery when using mobile GPS
+            receiverHealth = null
+        )
+        
+        android.util.Log.i("TmmRelayService", "=== Sending POST with ${if (isTrimbleConnected) "Trimble" else "Mobile GPS"} data ===")
+        android.util.Log.i("TmmRelayService", "Payload: TenantId=$tenantId, DeviceId=$deviceId, " +
+                "Lat=$latitude, Lng=$longitude, Battery=${payload.battery}, " +
+                "FixType=$fixType, Health=${payload.health}, HAcc=$horizontalAccuracy")
+        
+        // Check if we should send POST (every 5 minutes)
+        val shouldSendPost =
+            lastSuccessfulPostAt == null ||
+            java.time.Duration.between(lastSuccessfulPostAt, Instant.now()).toMinutes() >= 5
+        
+        if (shouldSendPost) {
+            ApiClient.send(
+                payload,
+                apiKey
+            ) { timestamp, payloadInfo, success ->
+                android.util.Log.i("TmmRelayService", "POST response: $timestamp - $payloadInfo (success=$success)")
+                if (success) lastSuccessfulPostAt = Instant.now()
+                updateNotificationWithPost(timestamp, payloadInfo)
+                updateDynamicStatus()
+            }
+        } else {
+            val minutesSinceLastPost = lastSuccessfulPostAt?.let {
+                java.time.Duration.between(it, Instant.now()).toMinutes()
+            } ?: 0
+            android.util.Log.d("TmmRelayService", "Skipping POST (last post was $minutesSinceLastPost minutes ago, need 5 minutes)")
+        }
+        
+        // Also broadcast diagnostics
         broadcastDiagnostics(payload)
     }
 
