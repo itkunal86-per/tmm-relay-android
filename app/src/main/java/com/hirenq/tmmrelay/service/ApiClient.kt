@@ -18,7 +18,7 @@ import java.time.format.DateTimeFormatter
 object ApiClient {
 
     private const val TAG = "ApiClient"
-    private const val API_URL = "https://altgeo-api.hirenq.com/api/Device/pushdata"
+    private const val API_URL = "https://altgeo-api.hirenq.com/api/DeviceLog/PushTelemetry"
     private val client: OkHttpClient = OkHttpClient.Builder()
         .build()
 
