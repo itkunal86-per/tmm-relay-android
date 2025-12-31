@@ -6,8 +6,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -99,8 +102,14 @@ class MainActivity : ComponentActivity() {
             // Check if all permissions are granted before starting
             if (!hasAllCriticalPermissions()) {
                 android.util.Log.w("MainActivity", "Missing critical permissions - cannot start service")
-                // Request permissions again if missing
-                ensurePermissions()
+                
+                // Check if user has permanently denied permissions (Don't ask again)
+                if (shouldRedirectToSettings()) {
+                    showPermissionSettingsDialog()
+                } else {
+                    // Request permissions again if not permanently denied
+                    ensurePermissions()
+                }
                 return@setOnClickListener
             }
 
@@ -116,27 +125,92 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun hasAllCriticalPermissions(): Boolean {
-    val location =
-        ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
+        val location =
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
 
-    val bluetooth =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        val bluetoothConnect =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
+            else true
+
+        val bluetoothScan =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.BLUETOOTH_SCAN
+                ) == PackageManager.PERMISSION_GRANTED
+            else true
+
+        val notifications =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            else true
+
+        return location && bluetoothConnect && bluetoothScan && notifications
+    }
+    
+    private fun shouldRedirectToSettings(): Boolean {
+        // Check if any critical permission was permanently denied (Don't ask again)
+        val locationDenied = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) != PackageManager.PERMISSION_GRANTED
+        
+        val bluetoothConnectDenied = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ContextCompat.checkSelfPermission(
                 this, Manifest.permission.BLUETOOTH_CONNECT
-            ) == PackageManager.PERMISSION_GRANTED
-        else true
-
-    val notifications =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            ) != PackageManager.PERMISSION_GRANTED
+        } else false
+        
+        val bluetoothScanDenied = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ContextCompat.checkSelfPermission(
-                this, Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        else true
-
-    return location && bluetooth && notifications
-}
+                this, Manifest.permission.BLUETOOTH_SCAN
+            ) != PackageManager.PERMISSION_GRANTED
+        } else false
+        
+        // If permission is denied and we can't show rationale, user selected "Don't ask again"
+        val locationPermanentlyDenied = locationDenied && 
+            !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
+        
+        val bluetoothConnectPermanentlyDenied = bluetoothConnectDenied && 
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                !shouldShowRequestPermissionRationale(Manifest.permission.BLUETOOTH_CONNECT)
+            } else false
+        
+        val bluetoothScanPermanentlyDenied = bluetoothScanDenied && 
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                !shouldShowRequestPermissionRationale(Manifest.permission.BLUETOOTH_SCAN)
+            } else false
+        
+        return locationPermanentlyDenied || bluetoothConnectPermanentlyDenied || bluetoothScanPermanentlyDenied
+    }
+    
+    private fun showPermissionSettingsDialog() {
+        Toast.makeText(
+            this,
+            "Please allow Location & Bluetooth permissions in Settings",
+            Toast.LENGTH_LONG
+        ).show()
+        
+        try {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", packageName, null)
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed to open app settings: ${e.message}", e)
+            Toast.makeText(
+                this,
+                "Please enable permissions manually in Settings",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     
     override fun onResume() {
@@ -279,9 +353,10 @@ class MainActivity : ComponentActivity() {
         // Always request location permission
         required.add(Manifest.permission.ACCESS_FINE_LOCATION)
 
-        // Request Bluetooth permission for Android 12+
+        // Request Bluetooth permissions for Android 12+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             required.add(Manifest.permission.BLUETOOTH_CONNECT)
+            required.add(Manifest.permission.BLUETOOTH_SCAN)
         }
 
         // Request notification permission for Android 13+
@@ -302,6 +377,8 @@ class MainActivity : ComponentActivity() {
                 permissionLauncher.launch(missing.toTypedArray())
             } catch (e: Exception) {
                 android.util.Log.e("MainActivity", "Failed to launch permission request: ${e.message}", e)
+                // If permission request fails, try redirecting to settings
+                showPermissionSettingsDialog()
             }
         } else {
             android.util.Log.i("MainActivity", "All permissions already granted")
@@ -319,8 +396,19 @@ class MainActivity : ComponentActivity() {
             }
             startActivity(intent)
             android.util.Log.i("MainActivity", "TMM login Intent launched")
+            // NOTE: TMM may not show login UI if:
+            // - User is already authenticated
+            // - TMM version disables forced login
+            // - This is expected behavior, not a bug
+        } catch (e: android.content.ActivityNotFoundException) {
+            android.util.Log.w("MainActivity", "TMM app not found. Please install Trimble Mobile Manager from Play Store")
+            Toast.makeText(
+                this,
+                "Please install Trimble Mobile Manager and sign in before starting",
+                Toast.LENGTH_LONG
+            ).show()
         } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Failed to launch TMM login", e)
+            android.util.Log.e("MainActivity", "Failed to launch TMM login: ${e.message}", e)
             // Continue anyway - subscription loading may still work if user is already logged in
         }
     }
