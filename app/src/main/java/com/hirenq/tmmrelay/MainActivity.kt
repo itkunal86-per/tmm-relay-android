@@ -441,8 +441,9 @@ class MainActivity : ComponentActivity() {
             val isSignedIn = try {
                 // TMM stores login info in its SharedPreferences
                 // Common keys: accountTID, accountEmail, userEmail, isLoggedIn
-                val prefs = createPackageContext(tmmPackageName, Context.MODE_PRIVATE)
-                    .getSharedPreferences("TMM_PREFS", Context.MODE_PRIVATE)
+                // Use CONTEXT_IGNORE_SECURITY flag to access TMM's SharedPreferences
+                val tmmContext = createPackageContext(tmmPackageName, Context.CONTEXT_IGNORE_SECURITY)
+                val prefs = tmmContext.getSharedPreferences("TMM_PREFS", Context.MODE_PRIVATE)
                 
                 // Check for various possible keys that indicate login
                 val accountTID = prefs.getString("accountTID", null)
