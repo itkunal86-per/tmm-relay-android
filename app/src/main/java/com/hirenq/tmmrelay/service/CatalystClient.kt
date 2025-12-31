@@ -205,348 +205,94 @@ class CatalystClient(
         }
     }
 
-    fun connect(tenantId: String, deviceId: String) {
-        this.tenantId = tenantId
-        this.deviceId = deviceId
-        
-        // Run initialization on a background thread to avoid blocking
-        Thread {
+     fun connect(tenantId: String, deviceId: String) {
+    this.tenantId = tenantId
+    this.deviceId = deviceId
+
+    Thread {
         try {
-                Log.i(TAG, "=== Starting Catalyst Client Initialization ===")
-                Log.i(TAG, "NOTE: Connection requires valid Trimble subscription/license")
-                Log.i(TAG, "      - Subscription can be loaded from Trimble Mobile Manager (TMM)")
-                Log.i(TAG, "      - Or from a subscription file if TMM is not available")
-                
-                Log.i(TAG, "Step 1: Initializing Trimble Licensing")
-                // Initialize Trimble Licensing before using SDK
-                val licensingResult = TrimbleLicensingUtil.initialize(context)
-                if (licensingResult) {
-                    Log.i(TAG, "✓ Trimble Licensing initialized successfully")
-                } else {
-                    Log.w(TAG, "⚠ Trimble Licensing initialization returned false (may still work)")
+            Log.i(TAG, "=== Catalyst connect() start ===")
+
+            /* ---------------- STEP 1: Licensing ---------------- */
+            TrimbleLicensingUtil.initialize(context)
+
+            /* ---------------- STEP 2: Create Facade ---------------- */
+            val appGuid = context.packageName
+            facade = CatalystFacade(appGuid, context.applicationContext)
+
+            /* ---------------- STEP 3: Launch TMM Login ---------------- */
+            try {
+                val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
+                    putExtra("applicationID", appGuid)
+                    putExtra("receiverName", "Catalyst")
+                    putExtra("noInstall", false)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                
-                Log.i(TAG, "Step 2: Getting app GUID")
-                // Get app GUID from application ID
-                val appGuid = context.packageName
-                Log.d(TAG, "Using app GUID: $appGuid")
-                
-                Log.i(TAG, "Step 3: Creating CatalystFacade instance")
-            // Create CatalystFacade instance
-                // Note: CatalystFacade constructor uses getExternalFilesDir which may require storage permissions
-                facade = try {
-                    val appContext = context.applicationContext
-                    Log.d(TAG, "Using application context: ${appContext.packageName}")
-                    val facadeInstance = CatalystFacade(appGuid, appContext)
-                    Log.d(TAG, "CatalystFacade instance created successfully")
-                    facadeInstance
-                } catch (e: NullPointerException) {
-                    Log.e(TAG, "CRITICAL: NullPointerException creating CatalystFacade - may need storage permissions", e)
-                    Log.e(TAG, "Exception message: ${e.message}")
-                    e.printStackTrace()
-                    onError(RuntimeException("Failed to create CatalystFacade: Storage access may be required", e))
-                    return@Thread
-                } catch (e: Exception) {
-                    Log.e(TAG, "CRITICAL: Failed to create CatalystFacade: ${e.message}", e)
-                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                    e.printStackTrace()
-                    onError(e)
-                    return@Thread
-                }
-                
-                Log.i(TAG, "Step 4: Loading subscription")
-                // NOTE: TMM login Intent is launched from MainActivity (before service starts)
-                // This ensures proper Activity context and user gesture, required for Samsung OneUI
-                // The SDK will fetch the logged-in user internally via IPC/ContentProviders
-                // Per demo: Immediately call loadSubscriptionFromTrimbleMobileManager(null) or loadSubscription()
-                // The SDK fetches the logged-in user internally via IPC
-                // Trust the return code - it's the source of truth
-                val loadRc = try {
-                    // Try loadSubscriptionFromTrimbleMobileManager(null) first (SDK fetches user internally)
-                    try {
-                        Log.i(TAG, "Calling loadSubscriptionFromTrimbleMobileManager(null)...")
-                        facade!!.loadSubscriptionFromTrimbleMobileManager(null)
-                    } catch (e: NoSuchMethodException) {
-                        // Method doesn't exist - use standard method
-                        Log.i(TAG, "loadSubscriptionFromTrimbleMobileManager not available, using loadSubscription()...")
-                        facade!!.loadSubscription()
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Exception during subscription load: ${e.message}", e)
-                    // Try standard method as fallback
-                    try {
-                        Log.i(TAG, "Trying fallback: loadSubscription()...")
-                        facade!!.loadSubscription()
-                    } catch (e2: Exception) {
-                        Log.e(TAG, "Both subscription load methods failed", e2)
-                        currentError = "NO_SUBSCRIPTION"
-                        onError(e2)
-                        return@Thread
-                    }
-                }
-                
-                Log.i(TAG, "Load subscription return code: ${loadRc.code}")
-                
-                if (loadRc.code != DriverReturnCode.Success) {
-                    // Map return code to specific error
-                    val codeStr = loadRc.code.toString()
-                    currentError = try {
-                        when {
-                            codeStr.contains("NoSubscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
-                            codeStr.contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
-                            codeStr.contains("Subscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
-                            codeStr.contains("License", ignoreCase = true) -> "NOT_LICENSED"
-                            else -> {
-                                Log.w(TAG, "Unknown subscription error code: $codeStr")
-                                "NO_SUBSCRIPTION"
-                            }
-                        }
-                    } catch (e: Exception) {
-                        "NO_SUBSCRIPTION"
-                    }
-                    val error = RuntimeException("Failed to load subscription with code: ${loadRc.code} ($codeStr)")
-                    Log.e(TAG, "=== SUBSCRIPTION LOAD FAILED ===")
-                    Log.e(TAG, "Error type: $currentError")
-                    Log.e(TAG, "Return code: ${loadRc.code}")
-                    Log.e(TAG, "This usually means:")
-                    Log.e(TAG, "  1. User is not logged in to TMM (retry after login)")
-                    Log.e(TAG, "  2. No valid Trimble subscription/license is available")
-                    Log.e(TAG, "  3. Subscription has expired")
-                    onError(error)
-                    return@Thread
-                }
-                currentError = null // Clear error on success
-                Log.i(TAG, "✓ Subscription loaded successfully")
-                
-                Log.i(TAG, "Step 5: Initializing driver")
-                // Initialize driver for Catalyst
-                val initRc = try {
-                    facade!!.initDriver(DriverType.Catalyst)
-                } catch (e: Exception) {
-                    Log.e(TAG, "CRITICAL: Exception during initDriver: ${e.message}", e)
-                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                    e.printStackTrace()
-                    onError(e)
-                    return@Thread
-                }
-                Log.d(TAG, "Init driver return code: ${initRc.code}")
-                
-                if (initRc.code != DriverReturnCode.Success) {
-                    // Map return code to specific error - check enum values safely
-                    currentError = try {
-                        val codeStr = initRc.code.toString()
-                        when {
-                            codeStr.contains("ReceiverNotSupported", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
-                            codeStr.contains("NoBluetoothPermission", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
-                            codeStr.contains("Bluetooth", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
-                            codeStr.contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
-                            codeStr.contains("License", ignoreCase = true) -> "NOT_LICENSED"
-                            codeStr.contains("Receiver", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
-                            else -> "RECEIVER_NOT_SUPPORTED" // Default to receiver error
-                        }
-                    } catch (e: Exception) {
-                        "RECEIVER_NOT_SUPPORTED" // Fallback
-                    }
-                    val error = RuntimeException("Failed to initialize driver with code: ${initRc.code}")
-                    Log.e(TAG, "Failed to initialize driver: $currentError", error)
-                    onError(error)
-                    return@Thread
-                }
-                currentError = null // Clear error on success
-                
-                Log.i(TAG, "Step 6: Connecting to sensor")
-                // Connect to sensor (this may take time, especially on first connection)
-                // NOTE: Event listener is added AFTER successful connection (per demo pattern)
-                val connectRc = try {
-                    facade!!.connect()
+
+                context.startActivity(loginIntent)
+                Log.i(TAG, "TMM login intent sent")
+
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not launch TMM login UI (may already be logged in)", e)
+            }
+
+            /* ---------------- STEP 4: Load Subscription ---------------- */
+            Log.i(TAG, "Loading subscription...")
+            val loadRc = facade!!.loadSubscription()
+
+            if (loadRc.code != DriverReturnCode.Success) {
+                Log.e(TAG, "Subscription load failed: ${loadRc.code}")
+                currentError = "NO_SUBSCRIPTION"
+                onError(RuntimeException("Subscription load failed: ${loadRc.code}"))
+                return@Thread
+            }
+
+            Log.i(TAG, "Subscription loaded")
+
+            /* ---------------- STEP 5: Init Driver ---------------- */
+            val initRc = facade!!.initDriver(DriverType.Catalyst)
+            if (initRc.code != DriverReturnCode.Success) {
+                currentError = "DRIVER_INIT_FAILED"
+                onError(RuntimeException("Driver init failed: ${initRc.code}"))
+                return@Thread
+            }
+
+            /* ---------------- STEP 6: Connect ---------------- */
+            val connectRc = facade!!.connect()
+            if (connectRc.code != DriverReturnCode.Success) {
+                currentError = "CONNECT_FAILED"
+                onError(RuntimeException("Connect failed: ${connectRc.code}"))
+                return@Thread
+            }
+
+            /* ---------------- STEP 7: License Check ---------------- */
+            val propsRc = facade!!.getSensorProperties()
+            if (propsRc.code != DriverReturnCode.Success ||
+                propsRc.returnedObject == null ||
+                !propsRc.returnedObject.isLicensed
+            ) {
+                currentError = "NOT_LICENSED"
+                onError(RuntimeException("Instrument not licensed"))
+                return@Thread
+            }
+
+            /* ---------------- STEP 8: Listener ---------------- */
+            facade!!.addCatalystEventListener(eventListener)
+
+            /* ---------------- STEP 9: Output Rate ---------------- */
+            facade!!.setOutputPositionRate(PositionRate.OneHz)
+
+            sdkConnected = true
+            Log.i(TAG, "=== Catalyst SDK connected ===")
+
         } catch (e: Exception) {
-                    Log.e(TAG, "CRITICAL: Exception during connect: ${e.message}", e)
-                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                    e.printStackTrace()
-            onError(e)
-                    return@Thread
-                }
-                Log.d(TAG, "Connect return code: ${connectRc.code}")
-                
-                if (connectRc.code != DriverReturnCode.Success) {
-                    // Map return code to specific error - check enum values safely
-                    currentError = try {
-                        val codeStr = connectRc.code.toString()
-                        when {
-                            codeStr.contains("NoBluetoothPermission", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
-                            codeStr.contains("Bluetooth", ignoreCase = true) -> "NO_BLUETOOTH_PERMISSION"
-                            codeStr.contains("ReceiverNotSupported", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
-                            codeStr.contains("Receiver", ignoreCase = true) -> "RECEIVER_NOT_SUPPORTED"
-                            codeStr.contains("NoSubscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
-                            codeStr.contains("Subscription", ignoreCase = true) -> "NO_SUBSCRIPTION"
-                            codeStr.contains("NotLicensed", ignoreCase = true) -> "NOT_LICENSED"
-                            codeStr.contains("License", ignoreCase = true) -> "NOT_LICENSED"
-                            else -> "CONNECTION_FAILED" // Generic connection error
-                        }
-                    } catch (e: Exception) {
-                        "CONNECTION_FAILED" // Fallback
-                    }
-                    val error = RuntimeException("Failed to connect with code: ${connectRc.code}")
-                    Log.e(TAG, "Failed to connect: $currentError", error)
-                    isConnected = false
-                    sdkConnected = false
-                    lastDataReceivedAt = null
-                    onError(error)
-                    return@Thread
-                }
-                
-                Log.i(TAG, "Step 7: Checking sensor license")
-                // Check if sensor is licensed (per demo pattern - MainModel.java line 631)
-                val sensorProperties: ReturnObject<SensorProperties> = try {
-                    facade!!.getSensorProperties()
-                } catch (e: Exception) {
-                    Log.e(TAG, "CRITICAL: Exception getting sensor properties: ${e.message}", e)
-                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                    e.printStackTrace()
-                    // Disconnect if we can't get properties
-                    try {
-                        facade?.disconnectFromSensor()
-                    } catch (e2: Exception) {
-                        Log.w(TAG, "Error disconnecting after property check failure", e2)
-                    }
-                    currentError = "NOT_LICENSED"
-                    isConnected = false
-                    sdkConnected = false
-                    lastDataReceivedAt = null
-                    onError(RuntimeException("Failed to get sensor properties: ${e.message}", e))
-                    return@Thread
-                }
-                
-                if (sensorProperties.code != DriverReturnCode.Success) {
-                    Log.e(TAG, "Failed to get sensor properties with code: ${sensorProperties.code}")
-                    try {
-                        facade?.disconnectFromSensor()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error disconnecting after property check failure", e)
-                    }
-                    currentError = "NOT_LICENSED"
-                    isConnected = false
-                    sdkConnected = false
-                    lastDataReceivedAt = null
-                    onError(RuntimeException("Failed to get sensor properties"))
-                    return@Thread
-                }
-                
-                val sensorProps = try {
-                    sensorProperties.getReturnedObject()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error getting returned object from sensor properties: ${e.message}", e)
-                    null
-                }
-                
-                if (sensorProps == null) {
-                    Log.e(TAG, "Sensor properties returned object is null - disconnecting")
-                    try {
-                        facade?.disconnectFromSensor()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error disconnecting after null properties", e)
-                    }
-                    currentError = "NOT_LICENSED"
-                    isConnected = false
-                    sdkConnected = false
-                    lastDataReceivedAt = null
-                    onError(RuntimeException("Failed to get sensor properties object"))
-                    return@Thread
-                }
-                
-                val isLicensed = try {
-                    sensorProps.isLicensed()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error checking license status: ${e.message}", e)
-                    false
-                }
-                
-                // Log detailed license information
-                Log.i(TAG, "Sensor license check result: isLicensed=$isLicensed")
-                try {
-                    val instrumentName = sensorProps.getInstrumentName()
-                    val serialNumber = sensorProps.getSerialNumber()
-                    val firmware = sensorProps.getFirmware()
-                    Log.i(TAG, "Instrument details: Name=$instrumentName, Serial=$serialNumber, FW=$firmware")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not get instrument details: ${e.message}")
-                }
-                
-                // Per demo (MainModel.java line 631-647): If not licensed, disconnect and return error
-                if (!isLicensed) {
-                    Log.e(TAG, "Sensor is not licensed - disconnecting (per demo pattern)")
-                    try {
-                        facade?.disconnectFromSensor()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error disconnecting unlicensed sensor", e)
-                    }
-                    currentError = "NOT_LICENSED"
-                    isConnected = false
-                    sdkConnected = false
-                    lastDataReceivedAt = null
-                    onError(RuntimeException("The instrument is not licensed"))
-                    return@Thread
-                }
-                
-                Log.i(TAG, "✓ Sensor is licensed")
-                
-                val instrumentInfo = try {
-                    "Instrument: ${sensorProps.getInstrumentName()}, " +
-                    "Serial: ${sensorProps.getSerialNumber()}, " +
-                    "FW: ${sensorProps.getFirmware()}"
-                } catch (e: Exception) {
-                    "Instrument info unavailable"
-                }
-                Log.i(TAG, instrumentInfo)
-                
-                Log.i(TAG, "Step 8: Adding event listener")
-                // Add event listener AFTER successful connection (per demo pattern - MainModel.java line 635)
-                try {
-                    facade!!.addCatalystEventListener(eventListener)
-                    Log.d(TAG, "Event listener added successfully")
-        } catch (e: Exception) {
-                    Log.e(TAG, "CRITICAL: Exception during addCatalystEventListener: ${e.message}", e)
-                    Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                    e.printStackTrace()
-                    // Disconnect if we can't add listener
-                    try {
-                        facade?.disconnectFromSensor()
-                    } catch (e2: Exception) {
-                        Log.w(TAG, "Error disconnecting after listener add failure", e2)
-                    }
-            onError(e)
-                    return@Thread
-                }
-                
-                Log.i(TAG, "Step 9: Setting position rate")
-                // Set position rate to 1Hz (per demo pattern - MainModel.java line 662)
-                val positionRateRc = try {
-                    facade!!.setOutputPositionRate(PositionRate.OneHz)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Exception setting position rate: ${e.message}", e)
-                    ReturnCode(DriverReturnCode.Error)
-                }
-                
-                if (positionRateRc.code != DriverReturnCode.Success) {
-                    Log.w(TAG, "Warning: Failed to set position rate (code: ${positionRateRc.code}) - continuing anyway")
-                } else {
-                    Log.i(TAG, "✓ Position rate set to 1Hz")
-                }
-                
-                sdkConnected = true
-                // Don't set isConnected = true yet - wait for actual data from receiver
-                currentError = null // Clear error on successful connection
-                Log.i(TAG, "=== SDK connected - waiting for receiver data... ===")
-                
-        } catch (e: Exception) {
-                Log.e(TAG, "=== FATAL ERROR in Catalyst initialization ===", e)
-                Log.e(TAG, "Exception type: ${e.javaClass.name}")
-                Log.e(TAG, "Exception message: ${e.message}")
-                e.printStackTrace()
+            Log.e(TAG, "Fatal connect error", e)
+            currentError = "INIT_FAILED"
             onError(e)
         }
-        }.start()
-    }
+    }.start()
+}
+
     
     fun createAndSendTelemetry() {
         val position = latestPosition ?: return
