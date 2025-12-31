@@ -19,9 +19,17 @@ import com.hirenq.tmmrelay.util.CrashHandler
 class MainActivity : ComponentActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    private var hasRequestedPermissions = false
 
     private val permissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            // Handle permission results
+            val allGranted = permissions.all { it.value }
+            android.util.Log.i("MainActivity", "Permission request completed. All granted: $allGranted")
+            if (!allGranted) {
+                android.util.Log.w("MainActivity", "Some permissions were denied")
+            }
+        }
 
     // ---------------- STATUS RECEIVER ----------------
 
@@ -87,9 +95,6 @@ class MainActivity : ComponentActivity() {
         updateStatusUI("Stopped", "", "")
         binding.tvDiagnostics.text = "Waiting for diagnostics..."
 
-        // Request all permissions when app opens for the first time
-        ensurePermissions()
-
         binding.btnStart.setOnClickListener {
             // Check if all permissions are granted before starting
             if (!hasAllCriticalPermissions()) {
@@ -146,7 +151,12 @@ class MainActivity : ComponentActivity() {
                 IntentFilter(TmmRelayService.ACTION_DIAGNOSTICS_UPDATE)
             )
 
-            //startService(Intent(this, TmmRelayService::class.java))
+            // Request all permissions when app opens for the first time
+            if (!hasRequestedPermissions) {
+                android.util.Log.i("MainActivity", "Requesting permissions on app open (onResume)...")
+                ensurePermissions()
+                hasRequestedPermissions = true
+            }
         } catch (_: Exception) {}
     }
 
@@ -264,24 +274,37 @@ class MainActivity : ComponentActivity() {
     // ---------------- PERMISSIONS ----------------
 
     private fun ensurePermissions() {
-        val required = mutableListOf(
-            Manifest.permission.ACCESS_FINE_LOCATION
-        )
+        val required = mutableListOf<String>()
+        
+        // Always request location permission
+        required.add(Manifest.permission.ACCESS_FINE_LOCATION)
 
+        // Request Bluetooth permission for Android 12+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            required += Manifest.permission.BLUETOOTH_CONNECT
+            required.add(Manifest.permission.BLUETOOTH_CONNECT)
         }
 
+        // Request notification permission for Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            required += Manifest.permission.POST_NOTIFICATIONS
+            required.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
         val missing = required.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
+        android.util.Log.d("MainActivity", "Required permissions: $required")
+        android.util.Log.d("MainActivity", "Missing permissions: $missing")
+
         if (missing.isNotEmpty()) {
-            permissionLauncher.launch(missing.toTypedArray())
+            android.util.Log.i("MainActivity", "Launching permission request dialog for: $missing")
+            try {
+                permissionLauncher.launch(missing.toTypedArray())
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Failed to launch permission request: ${e.message}", e)
+            }
+        } else {
+            android.util.Log.i("MainActivity", "All permissions already granted")
         }
     }
 
