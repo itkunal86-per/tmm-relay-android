@@ -410,27 +410,43 @@ class MainActivity : ComponentActivity() {
 
     // ---------------- TMM LOGIN ----------------
 
-    private fun updateTmmLoginStatus() {
-        try {
-            val tmmPackageName = "com.trimble.tmm"
-            
-            // First check if TMM is installed
-            val isTmmInstalled = try {
+    /**
+     * Check if TMM is installed by trying multiple known package names.
+     * TMM package name varies by region, version, and build type.
+     */
+    private fun findInstalledTmmPackage(): String? {
+        val knownPackages = listOf(
+            "com.trimble.tmm",
+            "com.trimble.mobilemanager",
+            "com.trimble.trimblemobilemanager",
+            "com.trimble.tmm.enterprise"
+        )
+
+        val pm = packageManager
+        for (pkg in knownPackages) {
+            try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    packageManager.getPackageInfo(tmmPackageName, PackageManager.PackageInfoFlags.of(0))
+                    pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
                 } else {
                     @Suppress("DEPRECATION")
-                    packageManager.getPackageInfo(tmmPackageName, 0)
+                    pm.getPackageInfo(pkg, 0)
                 }
-                true
+                android.util.Log.d("MainActivity", "Found TMM package: $pkg")
+                return pkg
             } catch (e: PackageManager.NameNotFoundException) {
-                false
+                // Continue to next package
             } catch (e: Exception) {
-                android.util.Log.w("MainActivity", "Error checking TMM installation for status: ${e.message}")
-                false
+                android.util.Log.w("MainActivity", "Error checking package $pkg: ${e.message}")
             }
+        }
+        return null
+    }
+
+    private fun updateTmmLoginStatus() {
+        try {
+            val tmmPackageName = findInstalledTmmPackage()
             
-            if (!isTmmInstalled) {
+            if (tmmPackageName == null) {
                 binding.tvTmmLoginStatus.text = "TMM: Not Installed"
                 binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_light))
                 binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
@@ -493,42 +509,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Launch TMM login Intent from Activity (user action required).
+     * This MUST be called from MainActivity, NOT from Service/background thread.
+     * Android 10+ blocks Activity launches from background threads.
+     */
     private fun launchTmmLoginIfNeeded() {
-        val tmmPackageName = "com.trimble.tmm"
+        // Find installed TMM package (checks multiple possible names)
+        val tmmPackageName = findInstalledTmmPackage()
         
-        // Check if TMM is installed using multiple methods for reliability
-        val isTmmInstalled = try {
-            // Method 1: Try to get package info (works on most devices)
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    packageManager.getPackageInfo(tmmPackageName, PackageManager.PackageInfoFlags.of(0))
-                } else {
-                    @Suppress("DEPRECATION")
-                    packageManager.getPackageInfo(tmmPackageName, 0)
-                }
-                android.util.Log.d("MainActivity", "TMM package found via getPackageInfo")
-                true
-            } catch (e: PackageManager.NameNotFoundException) {
-                // Method 2: Try querying for activities that can handle the Intent
-                val intent = Intent("com.trimble.tmm.LOGIN").apply {
-                    setPackage(tmmPackageName)
-                }
-                val activities = packageManager.queryIntentActivities(intent, 0)
-                val found = activities.isNotEmpty()
-                android.util.Log.d("MainActivity", "TMM check via queryIntentActivities: $found (found ${activities.size} activities)")
-                found
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "Error checking TMM installation: ${e.message}", e)
-            // If all checks fail, assume TMM might be installed and try anyway
-            // Don't block the user - let the SDK handle subscription loading
-            android.util.Log.i("MainActivity", "Assuming TMM might be installed, will try Intent anyway")
-            true // Assume installed to avoid false negatives
-        }
-        
-        android.util.Log.i("MainActivity", "TMM installation check result: $isTmmInstalled")
-        
-        if (!isTmmInstalled) {
+        if (tmmPackageName == null) {
             android.util.Log.w("MainActivity", "TMM app not found. Please install Trimble Mobile Manager from Play Store")
             Toast.makeText(
                 this,
@@ -538,15 +528,19 @@ class MainActivity : ComponentActivity() {
             return
         }
         
-        // TMM is installed, try to launch login Intent
+        android.util.Log.i("MainActivity", "Launching TMM login Intent for package: $tmmPackageName")
+        
+        // TMM is installed, launch login Intent from Activity (user action)
+        // This is the ONLY correct way - launching from Service/background is blocked on Android 10+
         try {
             val intent = Intent("com.trimble.tmm.LOGIN").apply {
                 setPackage(tmmPackageName)
                 putExtra("applicationID", packageName)
                 putExtra("receiverName", "Catalyst")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-            android.util.Log.i("MainActivity", "TMM login Intent launched successfully")
+            android.util.Log.i("MainActivity", "TMM login Intent launched successfully from Activity")
             // NOTE: TMM may not show login UI if:
             // - User is already authenticated (this is expected)
             // - TMM version disables forced login
