@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -23,6 +24,16 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private var hasRequestedPermissions = false
+    
+    // Handler for periodic TMM login status checks
+    private val statusCheckHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val statusCheckRunnable = object : Runnable {
+        override fun run() {
+            updateTmmLoginStatus()
+            // Check every 2 seconds while activity is active
+            statusCheckHandler.postDelayed(this, 2000)
+        }
+    }
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -97,6 +108,9 @@ class MainActivity : ComponentActivity() {
 
         updateStatusUI("Stopped", "", "")
         binding.tvDiagnostics.text = "Waiting for diagnostics..."
+        
+        // Check TMM login status on startup
+        updateTmmLoginStatus()
 
         binding.btnStart.setOnClickListener {
             // Check if all permissions are granted before starting
@@ -231,12 +245,21 @@ class MainActivity : ComponentActivity() {
                 ensurePermissions()
                 hasRequestedPermissions = true
             }
+            
+            // Update TMM login status when activity resumes
+            updateTmmLoginStatus()
+            
+            // Start periodic status checking to detect external TMM login changes
+            statusCheckHandler.post(statusCheckRunnable)
         } catch (_: Exception) {}
     }
 
     override fun onPause() {
         super.onPause()
         try {
+            // Stop periodic status checking when activity is paused
+            statusCheckHandler.removeCallbacks(statusCheckRunnable)
+            
             LocalBroadcastManager.getInstance(this)
                 .unregisterReceiver(statusReceiver)
             LocalBroadcastManager.getInstance(this)
@@ -387,19 +410,122 @@ class MainActivity : ComponentActivity() {
 
     // ---------------- TMM LOGIN ----------------
 
+    private fun updateTmmLoginStatus() {
+        try {
+            val tmmPackageName = "com.trimble.tmm"
+            
+            // First check if TMM is installed
+            val isTmmInstalled = try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    packageManager.getPackageInfo(tmmPackageName, PackageManager.PackageInfoFlags.of(0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageManager.getPackageInfo(tmmPackageName, 0)
+                }
+                true
+            } catch (e: PackageManager.NameNotFoundException) {
+                false
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Error checking TMM installation for status: ${e.message}")
+                false
+            }
+            
+            if (!isTmmInstalled) {
+                binding.tvTmmLoginStatus.text = "TMM: Not Installed"
+                binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_light))
+                binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
+                return
+            }
+            
+            // TMM is installed, check login status via SharedPreferences
+            val isSignedIn = try {
+                // TMM stores login info in its SharedPreferences
+                // Common keys: accountTID, accountEmail, userEmail, isLoggedIn
+                val prefs = createPackageContext(tmmPackageName, Context.MODE_PRIVATE)
+                    .getSharedPreferences("TMM_PREFS", Context.MODE_PRIVATE)
+                
+                // Check for various possible keys that indicate login
+                val accountTID = prefs.getString("accountTID", null)
+                val accountEmail = prefs.getString("accountEmail", null)
+                val userEmail = prefs.getString("userEmail", null)
+                val isLoggedIn = prefs.getBoolean("isLoggedIn", false)
+                
+                // User is signed in if any of these indicators exist
+                val signedIn = !accountTID.isNullOrBlank() || 
+                              !accountEmail.isNullOrBlank() || 
+                              !userEmail.isNullOrBlank() || 
+                              isLoggedIn
+                
+                android.util.Log.d("MainActivity", "TMM login check: accountTID=$accountTID, accountEmail=$accountEmail, userEmail=$userEmail, isLoggedIn=$isLoggedIn, result=$signedIn")
+                signedIn
+            } catch (e: SecurityException) {
+                android.util.Log.w("MainActivity", "Cannot access TMM SharedPreferences (security): ${e.message}")
+                // If we can't access, assume not signed in to be safe
+                false
+            } catch (e: PackageManager.NameNotFoundException) {
+                android.util.Log.w("MainActivity", "TMM package context not found: ${e.message}")
+                false
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Error checking TMM login status: ${e.message}", e)
+                // On error, show unknown status
+                binding.tvTmmLoginStatus.text = "TMM: Unknown"
+                binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.darker_gray))
+                binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
+                return
+            }
+            
+            // Update UI based on login status
+            if (isSignedIn) {
+                binding.tvTmmLoginStatus.text = "TMM: Signed In ✓"
+                binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
+                binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
+            } else {
+                binding.tvTmmLoginStatus.text = "TMM: Not Signed In"
+                binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_orange_dark))
+                binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error updating TMM login status: ${e.message}", e)
+            binding.tvTmmLoginStatus.text = "TMM: Error"
+            binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.darker_gray))
+            binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
+        }
+    }
+
     private fun launchTmmLoginIfNeeded() {
         val tmmPackageName = "com.trimble.tmm"
         
-        // First, check if TMM is actually installed
+        // Check if TMM is installed using multiple methods for reliability
         val isTmmInstalled = try {
-            packageManager.getPackageInfo(tmmPackageName, 0)
-            true
-        } catch (e: PackageManager.NameNotFoundException) {
-            false
+            // Method 1: Try to get package info (works on most devices)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    packageManager.getPackageInfo(tmmPackageName, PackageManager.PackageInfoFlags.of(0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageManager.getPackageInfo(tmmPackageName, 0)
+                }
+                android.util.Log.d("MainActivity", "TMM package found via getPackageInfo")
+                true
+            } catch (e: PackageManager.NameNotFoundException) {
+                // Method 2: Try querying for activities that can handle the Intent
+                val intent = Intent("com.trimble.tmm.LOGIN").apply {
+                    setPackage(tmmPackageName)
+                }
+                val activities = packageManager.queryIntentActivities(intent, 0)
+                val found = activities.isNotEmpty()
+                android.util.Log.d("MainActivity", "TMM check via queryIntentActivities: $found (found ${activities.size} activities)")
+                found
+            }
         } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "Error checking TMM installation: ${e.message}")
-            false
+            android.util.Log.w("MainActivity", "Error checking TMM installation: ${e.message}", e)
+            // If all checks fail, assume TMM might be installed and try anyway
+            // Don't block the user - let the SDK handle subscription loading
+            android.util.Log.i("MainActivity", "Assuming TMM might be installed, will try Intent anyway")
+            true // Assume installed to avoid false negatives
         }
+        
+        android.util.Log.i("MainActivity", "TMM installation check result: $isTmmInstalled")
         
         if (!isTmmInstalled) {
             android.util.Log.w("MainActivity", "TMM app not found. Please install Trimble Mobile Manager from Play Store")
@@ -424,6 +550,11 @@ class MainActivity : ComponentActivity() {
             // - User is already authenticated (this is expected)
             // - TMM version disables forced login
             // - This is expected behavior, not a bug
+            
+            // Refresh login status after a short delay to allow TMM to update
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                updateTmmLoginStatus()
+            }, 2000) // Wait 2 seconds for TMM to update SharedPreferences
         } catch (e: android.content.ActivityNotFoundException) {
             android.util.Log.w("MainActivity", "TMM login Activity not found - user may already be logged in")
             // Don't show error - TMM might be installed but login activity not available

@@ -12,6 +12,30 @@
     android:orientation="vertical"
     android:padding="24dp">
 
+    <!-- TMM Login Status in top right -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp">
+        
+        <TextView
+            android:id="@+id/tvTmmLoginStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentRight="true"
+            android:padding="8dp"
+            android:text="TMM: Checking..."
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:background="#E0E0E0"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:elevation="2dp" />
+    </RelativeLayout>
+
     <TextView
         android:id="@+id/tvTitle"
         android:layout_width="wrap_content"
