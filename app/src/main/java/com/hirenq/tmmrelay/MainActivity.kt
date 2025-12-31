@@ -105,7 +105,10 @@ class MainActivity : ComponentActivity() {
         
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
+       
+        if (!hasAllCriticalPermissions()) {
+         ensurePermissions()    
+        }    
         updateStatusUI("Stopped", "", "")
         binding.tvDiagnostics.text = "Waiting for diagnostics..."
         
