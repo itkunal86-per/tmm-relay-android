@@ -88,6 +88,7 @@ class MainActivity : ComponentActivity() {
         binding.tvDiagnostics.text = "Waiting for diagnostics..."
 
         binding.btnStart.setOnClickListener {
+            launchTmmLoginIfNeeded()
             ensurePermissions()
 
             if (!hasAllCriticalPermissions()) {
@@ -276,6 +277,23 @@ class MainActivity : ComponentActivity() {
 
         if (missing.isNotEmpty()) {
             permissionLauncher.launch(missing.toTypedArray())
+        }
+    }
+
+    // ---------------- TMM LOGIN ----------------
+
+    private fun launchTmmLoginIfNeeded() {
+        try {
+            val intent = Intent("com.trimble.tmm.LOGIN").apply {
+                setPackage("com.trimble.tmm")
+                putExtra("applicationID", packageName)
+                putExtra("receiverName", "Catalyst")
+            }
+            startActivity(intent)
+            android.util.Log.i("MainActivity", "TMM login Intent launched")
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed to launch TMM login", e)
+            // Continue anyway - subscription loading may still work if user is already logged in
         }
     }
 

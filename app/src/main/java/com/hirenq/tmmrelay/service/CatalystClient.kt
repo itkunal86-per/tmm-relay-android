@@ -254,44 +254,10 @@ class CatalystClient(
                     return@Thread
                 }
                 
-                Log.i(TAG, "Step 4: Launching TMM login Intent")
-                // Per demo (MainActivity.java line 130-135): Launch TMM login Intent
-                // This opens the Trimble login UI
-                // User must log in with the same Trimble ID that owns the Catalyst subscription
-                // CRITICAL: Do NOT wait or poll - just launch and continue
-                try {
-                    val tmmPackageName = "com.trimble.tmm"
-                    val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
-                        setPackage(tmmPackageName)
-                        putExtra("applicationID", appGuid)
-                        putExtra("receiverName", "Catalyst")
-                        putExtra("noInstall", false)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    
-                    Log.d(TAG, "Login Intent: Action=${loginIntent.action}, Package=${loginIntent.`package`}, AppID=$appGuid")
-                    
-                    // Launch Intent on main thread (required for Activity start)
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        try {
-                            context.startActivity(loginIntent)
-                            Log.i(TAG, "✓ TMM login Intent launched")
-                        } catch (e: android.content.ActivityNotFoundException) {
-                            Log.w(TAG, "TMM login Activity not found - will try loadSubscription anyway: ${e.message}")
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Error launching TMM login Intent - will try loadSubscription anyway: ${e.message}")
-                        }
-                    }
-                    
-                    // DO NOT WAIT - immediately proceed to subscription loading
-                    // The SDK will handle login internally via IPC/ContentProviders
-                    
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error launching login Intent - will try loadSubscription anyway: ${e.message}")
-                    // Continue - subscription loading may still work
-                }
-                
-                Log.i(TAG, "Step 5: Loading subscription (immediately, no waiting)")
+                Log.i(TAG, "Step 4: Loading subscription")
+                // NOTE: TMM login Intent is launched from MainActivity (before service starts)
+                // This ensures proper Activity context and user gesture, required for Samsung OneUI
+                // The SDK will fetch the logged-in user internally via IPC/ContentProviders
                 // Per demo: Immediately call loadSubscriptionFromTrimbleMobileManager(null) or loadSubscription()
                 // The SDK fetches the logged-in user internally via IPC
                 // Trust the return code - it's the source of truth
@@ -352,7 +318,7 @@ class CatalystClient(
                 currentError = null // Clear error on success
                 Log.i(TAG, "✓ Subscription loaded successfully")
                 
-                Log.i(TAG, "Step 7: Initializing driver")
+                Log.i(TAG, "Step 5: Initializing driver")
                 // Initialize driver for Catalyst
                 val initRc = try {
                     facade!!.initDriver(DriverType.Catalyst)
@@ -388,7 +354,7 @@ class CatalystClient(
                 }
                 currentError = null // Clear error on success
                 
-                Log.i(TAG, "Step 8: Connecting to sensor")
+                Log.i(TAG, "Step 6: Connecting to sensor")
                 // Connect to sensor (this may take time, especially on first connection)
                 // NOTE: Event listener is added AFTER successful connection (per demo pattern)
                 val connectRc = try {
@@ -533,7 +499,7 @@ class CatalystClient(
                 }
                 Log.i(TAG, instrumentInfo)
                 
-                Log.i(TAG, "Step 9: Adding event listener")
+                Log.i(TAG, "Step 8: Adding event listener")
                 // Add event listener AFTER successful connection (per demo pattern - MainModel.java line 635)
                 try {
                     facade!!.addCatalystEventListener(eventListener)
@@ -552,7 +518,7 @@ class CatalystClient(
                     return@Thread
                 }
                 
-                Log.i(TAG, "Step 10: Setting position rate")
+                Log.i(TAG, "Step 9: Setting position rate")
                 // Set position rate to 1Hz (per demo pattern - MainModel.java line 662)
                 val positionRateRc = try {
                     facade!!.setOutputPositionRate(PositionRate.OneHz)
