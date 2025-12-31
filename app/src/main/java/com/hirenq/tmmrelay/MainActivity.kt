@@ -388,28 +388,52 @@ class MainActivity : ComponentActivity() {
     // ---------------- TMM LOGIN ----------------
 
     private fun launchTmmLoginIfNeeded() {
-        try {
-            val intent = Intent("com.trimble.tmm.LOGIN").apply {
-                setPackage("com.trimble.tmm")
-                putExtra("applicationID", packageName)
-                putExtra("receiverName", "Catalyst")
-            }
-            startActivity(intent)
-            android.util.Log.i("MainActivity", "TMM login Intent launched")
-            // NOTE: TMM may not show login UI if:
-            // - User is already authenticated
-            // - TMM version disables forced login
-            // - This is expected behavior, not a bug
-        } catch (e: android.content.ActivityNotFoundException) {
+        val tmmPackageName = "com.trimble.tmm"
+        
+        // First, check if TMM is actually installed
+        val isTmmInstalled = try {
+            packageManager.getPackageInfo(tmmPackageName, 0)
+            true
+        } catch (e: PackageManager.NameNotFoundException) {
+            false
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Error checking TMM installation: ${e.message}")
+            false
+        }
+        
+        if (!isTmmInstalled) {
             android.util.Log.w("MainActivity", "TMM app not found. Please install Trimble Mobile Manager from Play Store")
             Toast.makeText(
                 this,
                 "Please install Trimble Mobile Manager and sign in before starting",
                 Toast.LENGTH_LONG
             ).show()
+            return
+        }
+        
+        // TMM is installed, try to launch login Intent
+        try {
+            val intent = Intent("com.trimble.tmm.LOGIN").apply {
+                setPackage(tmmPackageName)
+                putExtra("applicationID", packageName)
+                putExtra("receiverName", "Catalyst")
+            }
+            startActivity(intent)
+            android.util.Log.i("MainActivity", "TMM login Intent launched successfully")
+            // NOTE: TMM may not show login UI if:
+            // - User is already authenticated (this is expected)
+            // - TMM version disables forced login
+            // - This is expected behavior, not a bug
+        } catch (e: android.content.ActivityNotFoundException) {
+            android.util.Log.w("MainActivity", "TMM login Activity not found - user may already be logged in")
+            // Don't show error - TMM might be installed but login activity not available
+            // This is OK - SDK will handle subscription loading
+        } catch (e: SecurityException) {
+            android.util.Log.w("MainActivity", "Security exception launching TMM login: ${e.message}")
+            // Don't show error - continue anyway
         } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Failed to launch TMM login: ${e.message}", e)
-            // Continue anyway - subscription loading may still work if user is already logged in
+            android.util.Log.w("MainActivity", "Failed to launch TMM login: ${e.message}")
+            // Don't show error - continue anyway - subscription loading may still work if user is already logged in
         }
     }
 
