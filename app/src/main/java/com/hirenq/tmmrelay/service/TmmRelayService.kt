@@ -336,13 +336,13 @@ class TmmRelayService : Service() {
                 android.util.Log.w("TmmRelayService", "Step 5: Location permission not granted - mobile GPS tracking disabled")
             }
             
-        isRelayStarted = true
+            isRelayStarted = true
 
             android.util.Log.i("TmmRelayService", "Step 6: Starting foreground service")
-        startForeground(
-            NOTIFICATION_ID,
-            buildNotification("Started")
-        )
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification("Started")
+            )
             android.util.Log.i("TmmRelayService", "Step 6: Foreground service started")
 
             // Connect Catalyst client
