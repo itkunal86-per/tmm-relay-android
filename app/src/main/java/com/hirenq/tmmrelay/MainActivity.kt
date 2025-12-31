@@ -87,14 +87,19 @@ class MainActivity : ComponentActivity() {
         updateStatusUI("Stopped", "", "")
         binding.tvDiagnostics.text = "Waiting for diagnostics..."
 
+        // Request all permissions when app opens for the first time
+        ensurePermissions()
+
         binding.btnStart.setOnClickListener {
-            launchTmmLoginIfNeeded()
-            ensurePermissions()
-
+            // Check if all permissions are granted before starting
             if (!hasAllCriticalPermissions()) {
-                    return@setOnClickListener
-                }
+                android.util.Log.w("MainActivity", "Missing critical permissions - cannot start service")
+                // Request permissions again if missing
+                ensurePermissions()
+                return@setOnClickListener
+            }
 
+            launchTmmLoginIfNeeded()
             startRelayService()
         }
 
