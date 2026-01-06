@@ -6,7 +6,6 @@ import android.util.Log
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
 import com.hirenq.tmmrelay.util.LogCapture
-import com.hirenq.tmmrelay.util.TrimbleLicensingUtil
 import trimble.jssi.android.catalystfacade.CatalystFacade
 import trimble.jssi.android.catalystfacade.DriverReturnCode
 import trimble.jssi.android.catalystfacade.DriverType
@@ -214,14 +213,11 @@ class CatalystClient(
         try {
             LogCapture.log(Log.INFO, TAG, "=== Catalyst connect() start ===")
 
-            /* ---------------- STEP 1: Licensing ---------------- */
-            TrimbleLicensingUtil.initialize(context)
-
-            /* ---------------- STEP 2: Create Facade ---------------- */
+            /* ---------------- Create Facade ---------------- */
             val appGuid = context.packageName
             facade = CatalystFacade(appGuid, context.applicationContext)
 
-            /* ---------------- STEP 3: Launch TMM Login ---------------- */
+            /* ---------------- Launch TMM Login ---------------- */
             try {
                 val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
                     putExtra("applicationID", appGuid)
@@ -237,20 +233,16 @@ class CatalystClient(
                 LogCapture.log(Log.WARN, TAG, "Could not launch TMM login UI (may already be logged in)", e)
             }
 
-            /* ---------------- STEP 4: Load Subscription ---------------- */
+            /* ---------------- Load Subscription ---------------- */
             LogCapture.log(Log.INFO, TAG, "Loading subscription...")
-            val loadRc = facade!!.loadSubscription()
+            facade!!.loadSubscription()
+            LogCapture.log(Log.INFO, TAG, "Subscription load() called - SDK will handle the result")
 
-            if (loadRc.code != DriverReturnCode.Success) {
-                LogCapture.log(Log.ERROR, TAG, "Subscription load failed: ${loadRc.code}")
-                currentError = "NO_SUBSCRIPTION"
-                onError(RuntimeException("Subscription load failed: ${loadRc.code}"))
-                return@Thread
-            }
+            /* ---------------- Get Sensor Properties ---------------- */
+            facade!!.getSensorProperties()
+            LogCapture.log(Log.INFO, TAG, "getSensorProperties() called - SDK will handle licensing")
 
-            LogCapture.log(Log.INFO, TAG, "Subscription loaded")
-
-            /* ---------------- STEP 5: Init Driver ---------------- */
+            /* ---------------- Init Driver ---------------- */
             val initRc = facade!!.initDriver(DriverType.Catalyst)
             if (initRc.code != DriverReturnCode.Success) {
                 LogCapture.log(Log.ERROR, TAG, "Driver init failed: ${initRc.code}")
@@ -260,7 +252,7 @@ class CatalystClient(
             }
             LogCapture.log(Log.INFO, TAG, "Driver initialized successfully")
 
-            /* ---------------- STEP 6: Connect ---------------- */
+            /* ---------------- Connect ---------------- */
             val connectRc = facade!!.connect()
             if (connectRc.code != DriverReturnCode.Success) {
                 LogCapture.log(Log.ERROR, TAG, "Connect failed: ${connectRc.code}")
@@ -270,23 +262,10 @@ class CatalystClient(
             }
             LogCapture.log(Log.INFO, TAG, "Connected to sensor")
 
-            /* ---------------- STEP 7: License Check ---------------- */
-            val propsRc = facade!!.getSensorProperties()
-            if (propsRc.code != DriverReturnCode.Success ||
-                propsRc.returnedObject == null ||
-                !propsRc.returnedObject.isLicensed
-            ) {
-                LogCapture.log(Log.ERROR, TAG, "Instrument not licensed")
-                currentError = "NOT_LICENSED"
-                onError(RuntimeException("Instrument not licensed"))
-                return@Thread
-            }
-            LogCapture.log(Log.INFO, TAG, "License check passed")
-
-            /* ---------------- STEP 8: Listener ---------------- */
+            /* ---------------- Listener ---------------- */
             facade!!.addCatalystEventListener(eventListener)
 
-            /* ---------------- STEP 9: Output Rate ---------------- */
+            /* ---------------- Output Rate ---------------- */
             facade!!.setOutputPositionRate(PositionRate.OneHz)
 
             sdkConnected = true

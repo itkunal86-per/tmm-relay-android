@@ -144,6 +144,35 @@ class MainActivity : ComponentActivity() {
         binding.btnAccessLog.setOnClickListener {
             startActivity(Intent(this, LogViewerActivity::class.java))
         }
+
+        binding.btnOpenTmm.setOnClickListener {
+            val tmmPackages = listOf(
+                "com.trimble.mobilemanager",
+                "com.trimble.tmm",
+                "com.trimble.trimblemobilemanager",
+                "com.trimble.tmm.enterprise"
+            )
+            
+            var opened = false
+            for (pkg in tmmPackages) {
+                val intent = packageManager.getLaunchIntentForPackage(pkg)
+                if (intent != null) {
+                    startActivity(intent)
+                    opened = true
+                    LogCapture.log(android.util.Log.INFO, "MainActivity", "Opened TMM app: $pkg")
+                    break
+                }
+            }
+            
+            if (!opened) {
+                Toast.makeText(
+                    this,
+                    "Trimble Mobile Manager not found",
+                    Toast.LENGTH_SHORT
+                ).show()
+                LogCapture.log(android.util.Log.WARN, "MainActivity", "Could not open TMM - no package found")
+            }
+        }
     }
 
     private fun hasAllCriticalPermissions(): Boolean {
