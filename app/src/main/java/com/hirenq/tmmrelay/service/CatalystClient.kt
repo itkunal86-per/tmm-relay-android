@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
+import com.hirenq.tmmrelay.util.LogCapture
 import com.hirenq.tmmrelay.util.TrimbleLicensingUtil
 import trimble.jssi.android.catalystfacade.CatalystFacade
 import trimble.jssi.android.catalystfacade.DriverReturnCode
@@ -211,7 +212,7 @@ class CatalystClient(
 
     Thread {
         try {
-            Log.i(TAG, "=== Catalyst connect() start ===")
+            LogCapture.log(Log.INFO, TAG, "=== Catalyst connect() start ===")
 
             /* ---------------- STEP 1: Licensing ---------------- */
             TrimbleLicensingUtil.initialize(context)
@@ -230,40 +231,44 @@ class CatalystClient(
                 }
 
                 context.startActivity(loginIntent)
-                Log.i(TAG, "TMM login intent sent")
+                LogCapture.log(Log.INFO, TAG, "TMM login intent sent")
 
             } catch (e: Exception) {
-                Log.w(TAG, "Could not launch TMM login UI (may already be logged in)", e)
+                LogCapture.log(Log.WARN, TAG, "Could not launch TMM login UI (may already be logged in)", e)
             }
 
             /* ---------------- STEP 4: Load Subscription ---------------- */
-            Log.i(TAG, "Loading subscription...")
+            LogCapture.log(Log.INFO, TAG, "Loading subscription...")
             val loadRc = facade!!.loadSubscription()
 
             if (loadRc.code != DriverReturnCode.Success) {
-                Log.e(TAG, "Subscription load failed: ${loadRc.code}")
+                LogCapture.log(Log.ERROR, TAG, "Subscription load failed: ${loadRc.code}")
                 currentError = "NO_SUBSCRIPTION"
                 onError(RuntimeException("Subscription load failed: ${loadRc.code}"))
                 return@Thread
             }
 
-            Log.i(TAG, "Subscription loaded")
+            LogCapture.log(Log.INFO, TAG, "Subscription loaded")
 
             /* ---------------- STEP 5: Init Driver ---------------- */
             val initRc = facade!!.initDriver(DriverType.Catalyst)
             if (initRc.code != DriverReturnCode.Success) {
+                LogCapture.log(Log.ERROR, TAG, "Driver init failed: ${initRc.code}")
                 currentError = "DRIVER_INIT_FAILED"
                 onError(RuntimeException("Driver init failed: ${initRc.code}"))
                 return@Thread
             }
+            LogCapture.log(Log.INFO, TAG, "Driver initialized successfully")
 
             /* ---------------- STEP 6: Connect ---------------- */
             val connectRc = facade!!.connect()
             if (connectRc.code != DriverReturnCode.Success) {
+                LogCapture.log(Log.ERROR, TAG, "Connect failed: ${connectRc.code}")
                 currentError = "CONNECT_FAILED"
                 onError(RuntimeException("Connect failed: ${connectRc.code}"))
                 return@Thread
             }
+            LogCapture.log(Log.INFO, TAG, "Connected to sensor")
 
             /* ---------------- STEP 7: License Check ---------------- */
             val propsRc = facade!!.getSensorProperties()
@@ -271,10 +276,12 @@ class CatalystClient(
                 propsRc.returnedObject == null ||
                 !propsRc.returnedObject.isLicensed
             ) {
+                LogCapture.log(Log.ERROR, TAG, "Instrument not licensed")
                 currentError = "NOT_LICENSED"
                 onError(RuntimeException("Instrument not licensed"))
                 return@Thread
             }
+            LogCapture.log(Log.INFO, TAG, "License check passed")
 
             /* ---------------- STEP 8: Listener ---------------- */
             facade!!.addCatalystEventListener(eventListener)
@@ -283,10 +290,10 @@ class CatalystClient(
             facade!!.setOutputPositionRate(PositionRate.OneHz)
 
             sdkConnected = true
-            Log.i(TAG, "=== Catalyst SDK connected ===")
+            LogCapture.log(Log.INFO, TAG, "=== Catalyst SDK connected ===")
 
         } catch (e: Exception) {
-            Log.e(TAG, "Fatal connect error", e)
+            LogCapture.log(Log.ERROR, TAG, "Fatal connect error: ${e.message}", e)
             currentError = "INIT_FAILED"
             onError(e)
         }

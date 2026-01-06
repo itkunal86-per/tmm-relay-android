@@ -73,6 +73,7 @@ class TmmRelayService : Service() {
     // Enrich payload with mobile GPS data
     private fun enrichPayloadWithMobileGps(payload: TelemetryPayload): TelemetryPayload {
         val mobileBattery = DeviceInfoUtil.batteryLevel(this)
+        val mobileBatteryHealth = DeviceInfoUtil.getAndroidBatteryHealth(this)
         val dataSource = if (catalystClient?.getConnectionStatus() == true && 
                              (payload.latitude != 0.0 || payload.longitude != 0.0)) {
             "TRIMBLE"
@@ -87,6 +88,7 @@ class TmmRelayService : Service() {
             mobileLongitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLongitude else null,
             mobileAccuracy = if (mobileAccuracy > 0) mobileAccuracy else null,
             mobileBattery = mobileBattery,
+            mobileBatteryHealth = mobileBatteryHealth,
             dataSource = dataSource
         )
     }
@@ -260,18 +262,19 @@ class TmmRelayService : Service() {
 
             if (shouldSendPost) {
                 android.util.Log.i("TmmRelayService", "=== Sending POST request with full payload ===")
-                android.util.Log.i("TmmRelayService", "Payload: TenantId=${payload.tenantId}, " +
-                        "DeviceId=$deviceId, Lat=${payload.latitude}, Lng=${payload.longitude}, " +
-                        "Battery=${payload.battery}, FixType=${payload.fixType}, " +
-                        "Health=${payload.health}, HAcc=${payload.horizontalAccuracy}, " +
-                        "VAcc=${payload.verticalAccuracy}, Satellites=${payload.satellites}, " +
-                        "ReceiverBattery=${payload.receiverBattery}, ReceiverHealth=${payload.receiverHealth}, " +
-                        "MobileLat=${payload.mobileLatitude}, MobileLng=${payload.mobileLongitude}, " +
-                        "MobileAcc=${payload.mobileAccuracy}, MobileBattery=${payload.mobileBattery}, " +
-                        "DataSource=${payload.dataSource}")
                 
                 // Enrich payload with mobile GPS data before sending
                 val enrichedPayload = enrichPayloadWithMobileGps(payload.copy(deviceId = deviceId))
+                
+                android.util.Log.i("TmmRelayService", "Payload: TenantId=${enrichedPayload.tenantId}, " +
+                        "DeviceId=$deviceId, Lat=${enrichedPayload.latitude}, Lng=${enrichedPayload.longitude}, " +
+                        "Battery=${enrichedPayload.battery}, FixType=${enrichedPayload.fixType}, " +
+                        "Health=${enrichedPayload.health}, HAcc=${enrichedPayload.horizontalAccuracy}, " +
+                        "VAcc=${enrichedPayload.verticalAccuracy}, Satellites=${enrichedPayload.satellites}, " +
+                        "ReceiverBattery=${enrichedPayload.receiverBattery}, ReceiverHealth=${enrichedPayload.receiverHealth}, " +
+                        "MobileLat=${enrichedPayload.mobileLatitude}, MobileLng=${enrichedPayload.mobileLongitude}, " +
+                        "MobileAcc=${enrichedPayload.mobileAccuracy}, MobileBattery=${enrichedPayload.mobileBattery}, " +
+                        "MobileBatteryHealth=${enrichedPayload.mobileBatteryHealth}, DataSource=${enrichedPayload.dataSource}")
                 
                 ApiClient.send(
                     enrichedPayload,
@@ -539,7 +542,7 @@ class TmmRelayService : Service() {
                 "FixType=$fixType, Health=${payload.health}, HAcc=$horizontalAccuracy, " +
                 "MobileLat=${payload.mobileLatitude}, MobileLng=${payload.mobileLongitude}, " +
                 "MobileAcc=${payload.mobileAccuracy}, MobileBattery=${payload.mobileBattery}, " +
-                "DataSource=${payload.dataSource}")
+                "MobileBatteryHealth=${payload.mobileBatteryHealth}, DataSource=${payload.dataSource}")
         
         // Check if we should send POST (every 5 minutes)
         val shouldSendPost =
@@ -547,8 +550,11 @@ class TmmRelayService : Service() {
             java.time.Duration.between(lastSuccessfulPostAt, Instant.now()).toMinutes() >= 5
         
         if (shouldSendPost) {
+            // Enrich payload with mobile GPS data (including battery health) before sending
+            val enrichedPayload = enrichPayloadWithMobileGps(payload)
+            
             ApiClient.send(
-                payload,
+                enrichedPayload,
                 apiKey
             ) { timestamp, payloadInfo, success ->
                 android.util.Log.i("TmmRelayService", "POST response: $timestamp - $payloadInfo (success=$success)")

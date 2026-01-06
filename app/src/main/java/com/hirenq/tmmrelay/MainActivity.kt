@@ -19,6 +19,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.hirenq.tmmrelay.databinding.ActivityMainBinding
 import com.hirenq.tmmrelay.service.TmmRelayService
 import com.hirenq.tmmrelay.util.CrashHandler
+import com.hirenq.tmmrelay.util.LogCapture
 
 class MainActivity : ComponentActivity() {
 
@@ -39,9 +40,9 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
             // Handle permission results
             val allGranted = permissions.all { it.value }
-            android.util.Log.i("MainActivity", "Permission request completed. All granted: $allGranted")
+            LogCapture.log(android.util.Log.INFO, "MainActivity", "Permission request completed. All granted: $allGranted")
             if (!allGranted) {
-                android.util.Log.w("MainActivity", "Some permissions were denied")
+                LogCapture.log(android.util.Log.WARN, "MainActivity", "Some permissions were denied")
             }
         }
 
@@ -118,7 +119,7 @@ class MainActivity : ComponentActivity() {
         binding.btnStart.setOnClickListener {
             // Check if all permissions are granted before starting
             if (!hasAllCriticalPermissions()) {
-                android.util.Log.w("MainActivity", "Missing critical permissions - cannot start service")
+                LogCapture.log(android.util.Log.WARN, "MainActivity", "Missing critical permissions - cannot start service")
                 
                 // Check if user has permanently denied permissions (Don't ask again)
                 if (shouldRedirectToSettings()) {
@@ -138,6 +139,10 @@ class MainActivity : ComponentActivity() {
             stopService(Intent(this, TmmRelayService::class.java))
             updateStatusUI("Stopped", "", "")
             binding.tvDiagnostics.text = "Stopped"
+        }
+
+        binding.btnAccessLog.setOnClickListener {
+            startActivity(Intent(this, LogViewerActivity::class.java))
         }
     }
 
@@ -220,7 +225,7 @@ class MainActivity : ComponentActivity() {
                 }
             )
         } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Failed to open app settings: ${e.message}", e)
+            LogCapture.log(android.util.Log.ERROR, "MainActivity", "Failed to open app settings: ${e.message}", e)
             Toast.makeText(
                 this,
                 "Please enable permissions manually in Settings",
@@ -244,7 +249,7 @@ class MainActivity : ComponentActivity() {
 
             // Request all permissions when app opens for the first time
             if (!hasRequestedPermissions) {
-                android.util.Log.i("MainActivity", "Requesting permissions on app open (onResume)...")
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "Requesting permissions on app open (onResume)...")
                 ensurePermissions()
                 hasRequestedPermissions = true
             }
@@ -394,20 +399,20 @@ class MainActivity : ComponentActivity() {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
-        android.util.Log.d("MainActivity", "Required permissions: $required")
-        android.util.Log.d("MainActivity", "Missing permissions: $missing")
+        LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Required permissions: $required")
+        LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Missing permissions: $missing")
 
         if (missing.isNotEmpty()) {
-            android.util.Log.i("MainActivity", "Launching permission request dialog for: $missing")
+            LogCapture.log(android.util.Log.INFO, "MainActivity", "Launching permission request dialog for: $missing")
             try {
                 permissionLauncher.launch(missing.toTypedArray())
             } catch (e: Exception) {
-                android.util.Log.e("MainActivity", "Failed to launch permission request: ${e.message}", e)
+                LogCapture.log(android.util.Log.ERROR, "MainActivity", "Failed to launch permission request: ${e.message}", e)
                 // If permission request fails, try redirecting to settings
                 showPermissionSettingsDialog()
             }
         } else {
-            android.util.Log.i("MainActivity", "All permissions already granted")
+            LogCapture.log(android.util.Log.INFO, "MainActivity", "All permissions already granted")
         }
     }
 
@@ -434,12 +439,12 @@ class MainActivity : ComponentActivity() {
                     @Suppress("DEPRECATION")
                     pm.getPackageInfo(pkg, 0)
                 }
-                android.util.Log.d("MainActivity", "Found TMM package: $pkg")
+                LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Found TMM package: $pkg")
                 return pkg
             } catch (e: PackageManager.NameNotFoundException) {
                 // Continue to next package
             } catch (e: Exception) {
-                android.util.Log.w("MainActivity", "Error checking package $pkg: ${e.message}")
+                LogCapture.log(android.util.Log.WARN, "MainActivity", "Error checking package $pkg: ${e.message}")
             }
         }
         return null
@@ -476,17 +481,17 @@ class MainActivity : ComponentActivity() {
                               !userEmail.isNullOrBlank() || 
                               isLoggedIn
                 
-                android.util.Log.d("MainActivity", "TMM login check: accountTID=$accountTID, accountEmail=$accountEmail, userEmail=$userEmail, isLoggedIn=$isLoggedIn, result=$signedIn")
+                LogCapture.log(android.util.Log.DEBUG, "MainActivity", "TMM login check: accountTID=$accountTID, accountEmail=$accountEmail, userEmail=$userEmail, isLoggedIn=$isLoggedIn, result=$signedIn")
                 signedIn
             } catch (e: SecurityException) {
-                android.util.Log.w("MainActivity", "Cannot access TMM SharedPreferences (security): ${e.message}")
+                LogCapture.log(android.util.Log.WARN, "MainActivity", "Cannot access TMM SharedPreferences (security): ${e.message}")
                 // If we can't access, assume not signed in to be safe
                 false
             } catch (e: PackageManager.NameNotFoundException) {
-                android.util.Log.w("MainActivity", "TMM package context not found: ${e.message}")
+                LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM package context not found: ${e.message}")
                 false
             } catch (e: Exception) {
-                android.util.Log.w("MainActivity", "Error checking TMM login status: ${e.message}", e)
+                LogCapture.log(android.util.Log.WARN, "MainActivity", "Error checking TMM login status: ${e.message}", e)
                 // On error, show unknown status
                 binding.tvTmmLoginStatus.text = "TMM: Unknown"
                 binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.darker_gray))
@@ -505,7 +510,7 @@ class MainActivity : ComponentActivity() {
                 binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
             }
         } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Error updating TMM login status: ${e.message}", e)
+            LogCapture.log(android.util.Log.ERROR, "MainActivity", "Error updating TMM login status: ${e.message}", e)
             binding.tvTmmLoginStatus.text = "TMM: Error"
             binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.darker_gray))
             binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
@@ -522,7 +527,7 @@ class MainActivity : ComponentActivity() {
         val tmmPackageName = findInstalledTmmPackage()
         
         if (tmmPackageName == null) {
-            android.util.Log.w("MainActivity", "TMM app not found. Please install Trimble Mobile Manager from Play Store")
+            LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM app not found. Please install Trimble Mobile Manager from Play Store")
             Toast.makeText(
                 this,
                 "Please install Trimble Mobile Manager and sign in before starting",
@@ -531,7 +536,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         
-        android.util.Log.i("MainActivity", "Launching TMM login Intent for package: $tmmPackageName")
+        LogCapture.log(android.util.Log.INFO, "MainActivity", "Launching TMM login Intent for package: $tmmPackageName")
         
         // TMM is installed, launch login Intent from Activity (user action)
         // This is the ONLY correct way - launching from Service/background is blocked on Android 10+
@@ -543,7 +548,7 @@ class MainActivity : ComponentActivity() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-            android.util.Log.i("MainActivity", "TMM login Intent launched successfully from Activity")
+            LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM login Intent launched successfully from Activity")
             // NOTE: TMM may not show login UI if:
             // - User is already authenticated (this is expected)
             // - TMM version disables forced login
@@ -554,14 +559,14 @@ class MainActivity : ComponentActivity() {
                 updateTmmLoginStatus()
             }, 2000) // Wait 2 seconds for TMM to update SharedPreferences
         } catch (e: android.content.ActivityNotFoundException) {
-            android.util.Log.w("MainActivity", "TMM login Activity not found - user may already be logged in")
+            LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM login Activity not found - user may already be logged in")
             // Don't show error - TMM might be installed but login activity not available
             // This is OK - SDK will handle subscription loading
         } catch (e: SecurityException) {
-            android.util.Log.w("MainActivity", "Security exception launching TMM login: ${e.message}")
+            LogCapture.log(android.util.Log.WARN, "MainActivity", "Security exception launching TMM login: ${e.message}")
             // Don't show error - continue anyway
         } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "Failed to launch TMM login: ${e.message}")
+            LogCapture.log(android.util.Log.WARN, "MainActivity", "Failed to launch TMM login: ${e.message}")
             // Don't show error - continue anyway - subscription loading may still work if user is already logged in
         }
     }

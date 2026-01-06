@@ -30,4 +30,24 @@ object DeviceInfoUtil {
         }
         return "OK"
     }
+
+    fun getAndroidBatteryHealth(context: Context): String {
+        val intentFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val batteryStatus = context.registerReceiver(null, intentFilter)
+
+        val health = batteryStatus?.getIntExtra(
+            BatteryManager.EXTRA_HEALTH,
+            BatteryManager.BATTERY_HEALTH_UNKNOWN
+        )
+
+        return when (health) {
+            BatteryManager.BATTERY_HEALTH_GOOD -> "GOOD"
+            BatteryManager.BATTERY_HEALTH_DEAD -> "DEAD"
+            BatteryManager.BATTERY_HEALTH_OVERHEAT -> "OVERHEAT"
+            BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "OVER_VOLTAGE"
+            BatteryManager.BATTERY_HEALTH_UNSPECIFIED_FAILURE -> "FAILURE"
+            BatteryManager.BATTERY_HEALTH_COLD -> "COLD"
+            else -> "UNKNOWN"
+        }
+    }
 }

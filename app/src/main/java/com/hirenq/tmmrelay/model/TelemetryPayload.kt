@@ -26,5 +26,6 @@ data class TelemetryPayload(
     val mobileLongitude: Double? = null,
     val mobileAccuracy: Double? = null,
     val mobileBattery: Int? = null, // Same as battery, but explicitly included
+    val mobileBatteryHealth: String? = null, // Android device battery health (GOOD, DEAD, OVERHEAT, etc.)
     val dataSource: String? = null // "TRIMBLE" or "MOBILE_GPS" to indicate primary data source
 )

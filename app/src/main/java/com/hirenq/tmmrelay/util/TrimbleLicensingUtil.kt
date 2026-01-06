@@ -17,7 +17,7 @@ object TrimbleLicensingUtil {
      */
     fun initialize(context: Context): Boolean {
         if (isInitialized) {
-            Log.d(TAG, "Trimble Licensing already initialized")
+            LogCapture.log(Log.DEBUG, TAG, "Trimble Licensing already initialized")
             return true
         }
 
@@ -39,7 +39,7 @@ object TrimbleLicensingUtil {
                             try {
                                 Class.forName("com.trimble.Licensing.Android.LicensingManager")
                             } catch (e5: ClassNotFoundException) {
-                                Log.w(TAG, "Trimble Licensing class not found. Library may use different package structure.")
+                                LogCapture.log(Log.WARN, TAG, "Trimble Licensing class not found. Library may use different package structure.")
                                 null
                             }
                         }
@@ -48,13 +48,13 @@ object TrimbleLicensingUtil {
             }
 
             if (licensingClass != null) {
-                Log.i(TAG, "Found Trimble Licensing class: ${licensingClass.name}")
+                LogCapture.log(Log.INFO, TAG, "Found Trimble Licensing class: ${licensingClass.name}")
                 // Try different initialization methods
                 try {
                     // Try createV2Licensing method (common in Trimble SDK v2)
                     val createMethod = licensingClass.getMethod("createV2Licensing", Context::class.java)
                     val licensingInstance = createMethod.invoke(null, context.applicationContext)
-                    Log.i(TAG, "Created Trimble Licensing instance via createV2Licensing")
+                    LogCapture.log(Log.INFO, TAG, "Created Trimble Licensing instance via createV2Licensing")
                     isInitialized = true
                 } catch (e: NoSuchMethodException) {
                     // Try standard initialize method
@@ -62,27 +62,27 @@ object TrimbleLicensingUtil {
                         val initMethod = licensingClass.getMethod("initialize", Context::class.java)
                         val result = initMethod.invoke(null, context.applicationContext)
                         isInitialized = result as? Boolean ?: true
-                        Log.i(TAG, "Trimble Licensing initialized via initialize(): $isInitialized")
+                        LogCapture.log(Log.INFO, TAG, "Trimble Licensing initialized via initialize(): $isInitialized")
                     } catch (e2: Exception) {
-                        Log.w(TAG, "Could not call initialize() method: ${e2.message}")
+                        LogCapture.log(Log.WARN, TAG, "Could not call initialize() method: ${e2.message}")
                         // Some SDKs auto-initialize, so we'll continue
                         isInitialized = true
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Could not create licensing instance: ${e.message}")
+                    LogCapture.log(Log.WARN, TAG, "Could not create licensing instance: ${e.message}")
                     // Some SDKs auto-initialize, so we'll continue
                     isInitialized = true
                 }
             } else {
-                Log.w(TAG, "Trimble Licensing class not found. Continuing without explicit initialization.")
-                Log.w(TAG, "Note: SDK may auto-initialize, or subscription loading will handle licensing.")
+                LogCapture.log(Log.WARN, TAG, "Trimble Licensing class not found. Continuing without explicit initialization.")
+                LogCapture.log(Log.WARN, TAG, "Note: SDK may auto-initialize, or subscription loading will handle licensing.")
                 // Some SDKs auto-initialize, so we'll continue
                 isInitialized = true
             }
 
             isInitialized
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize Trimble Licensing", e)
+            LogCapture.log(Log.ERROR, TAG, "Failed to initialize Trimble Licensing: ${e.message}", e)
             // Continue anyway - some SDKs may not require explicit licensing initialization
             isInitialized = false
             false

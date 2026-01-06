@@ -77,6 +77,7 @@ object ApiClient {
             put("MobileLongitude", payload.mobileLongitude ?: JSONObject.NULL)
             put("MobileAccuracy", payload.mobileAccuracy ?: JSONObject.NULL)
             put("MobileBattery", payload.mobileBattery ?: JSONObject.NULL)
+            put("MobileBatteryHealth", payload.mobileBatteryHealth ?: JSONObject.NULL)
             put("DataSource", payload.dataSource ?: JSONObject.NULL)
         }
 
@@ -92,7 +93,7 @@ object ApiClient {
                 "HDOP=${payload.hdop}, VDOP=${payload.vdop}, " +
                 "MobileLat=${payload.mobileLatitude}, MobileLng=${payload.mobileLongitude}, " +
                 "MobileAcc=${payload.mobileAccuracy}, MobileBattery=${payload.mobileBattery}, " +
-                "DataSource=${payload.dataSource}")
+                "MobileBatteryHealth=${payload.mobileBatteryHealth}, DataSource=${payload.dataSource}")
 
         val body = jsonString.toRequestBody("application/json".toMediaType())
 
