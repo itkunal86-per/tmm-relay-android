@@ -419,7 +419,7 @@ class MainActivity : ComponentActivity() {
     // ---------------- TMM LOGIN ----------------
 
     /**
-     * Check if TMM is installed by trying multiple known package names.
+     * Check if TMM is installed by trying multiple known package names and intent resolution.
      * TMM package name varies by region, version, and build type.
      */
     private fun findInstalledTmmPackage(): String? {
@@ -431,6 +431,26 @@ class MainActivity : ComponentActivity() {
         )
 
         val pm = packageManager
+        
+        // First, try to resolve the TMM login intent - this is the most reliable method
+        try {
+            val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
+                putExtra("applicationID", packageName)
+                putExtra("receiverName", "Catalyst")
+            }
+            
+            val resolveInfo = pm.queryIntentActivities(loginIntent, PackageManager.MATCH_DEFAULT_ONLY)
+            if (resolveInfo.isNotEmpty()) {
+                // Get package name from first resolved activity
+                val packageName = resolveInfo[0].activityInfo.packageName
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "Found TMM package via intent resolution: $packageName")
+                return packageName
+            }
+        } catch (e: Exception) {
+            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Intent resolution failed: ${e.message}")
+        }
+        
+        // Fallback: Check known package names
         for (pkg in knownPackages) {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -447,17 +467,59 @@ class MainActivity : ComponentActivity() {
                 LogCapture.log(android.util.Log.WARN, "MainActivity", "Error checking package $pkg: ${e.message}")
             }
         }
+        
+        // Last resort: Search all installed packages for Trimble-related packages
+        try {
+            val installedPackages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getInstalledPackages(PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstalledPackages(0)
+            }
+            
+            for (packageInfo in installedPackages) {
+                val pkgName = packageInfo.packageName.lowercase()
+                if (pkgName.contains("trimble") && (pkgName.contains("tmm") || pkgName.contains("mobile"))) {
+                    LogCapture.log(android.util.Log.INFO, "MainActivity", "Found TMM package via search: ${packageInfo.packageName}")
+                    return packageInfo.packageName
+                }
+            }
+        } catch (e: Exception) {
+            LogCapture.log(android.util.Log.WARN, "MainActivity", "Error searching installed packages: ${e.message}")
+        }
+        
+        LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM package not found by any method")
         return null
     }
 
     private fun updateTmmLoginStatus() {
         try {
-            val tmmPackageName = findInstalledTmmPackage()
+            // First, try to detect TMM package
+            var tmmPackageName = findInstalledTmmPackage()
             
+            // If package detection failed, try intent resolution as fallback
             if (tmmPackageName == null) {
-                binding.tvTmmLoginStatus.text = "TMM: Not Installed"
-                binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_light))
+                try {
+                    val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
+                        putExtra("applicationID", packageName)
+                        putExtra("receiverName", "Catalyst")
+                    }
+                    val resolveInfo = packageManager.resolveActivity(loginIntent, PackageManager.MATCH_DEFAULT_ONLY)
+                    if (resolveInfo != null) {
+                        tmmPackageName = resolveInfo.activityInfo.packageName
+                        LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM detected via intent resolution in status check: $tmmPackageName")
+                    }
+                } catch (e: Exception) {
+                    LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Intent resolution in status check failed: ${e.message}")
+                }
+            }
+            
+            // If still not found, show "Unknown" but don't show "Not Installed" since intent might work
+            if (tmmPackageName == null) {
+                binding.tvTmmLoginStatus.text = "TMM: Checking..."
+                binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.darker_gray))
                 binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
+                LogCapture.log(android.util.Log.DEBUG, "MainActivity", "TMM package not found, showing 'Checking...' status")
                 return
             }
             
@@ -493,7 +555,7 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) {
                 LogCapture.log(android.util.Log.WARN, "MainActivity", "Error checking TMM login status: ${e.message}", e)
                 // On error, show unknown status
-                binding.tvTmmLoginStatus.text = "TMM: Unknown"
+                binding.tvTmmLoginStatus.text = "TMM: Installed (Status Unknown)"
                 binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.darker_gray))
                 binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
                 return
@@ -505,7 +567,7 @@ class MainActivity : ComponentActivity() {
                 binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
                 binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
             } else {
-                binding.tvTmmLoginStatus.text = "TMM: Not Signed In"
+                binding.tvTmmLoginStatus.text = "TMM: Installed (Not Signed In)"
                 binding.tvTmmLoginStatus.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_orange_dark))
                 binding.tvTmmLoginStatus.setTextColor(ContextCompat.getColor(this, android.R.color.white))
             }
@@ -523,32 +585,41 @@ class MainActivity : ComponentActivity() {
      * Android 10+ blocks Activity launches from background threads.
      */
     private fun launchTmmLoginIfNeeded() {
-        // Find installed TMM package (checks multiple possible names)
-        val tmmPackageName = findInstalledTmmPackage()
-        
-        if (tmmPackageName == null) {
-            LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM app not found. Please install Trimble Mobile Manager from Play Store")
-            Toast.makeText(
-                this,
-                "Please install Trimble Mobile Manager and sign in before starting",
-                Toast.LENGTH_LONG
-            ).show()
-            return
-        }
-        
-        LogCapture.log(android.util.Log.INFO, "MainActivity", "Launching TMM login Intent for package: $tmmPackageName")
-        
-        // TMM is installed, launch login Intent from Activity (user action)
-        // This is the ONLY correct way - launching from Service/background is blocked on Android 10+
+        // Try to launch TMM login Intent directly - this is the most reliable way
+        // If the intent resolves, TMM is installed
         try {
             val intent = Intent("com.trimble.tmm.LOGIN").apply {
-                setPackage(tmmPackageName)
                 putExtra("applicationID", packageName)
                 putExtra("receiverName", "Catalyst")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            
+            // Try to resolve the intent to check if TMM is installed
+            val resolveInfo = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            if (resolveInfo == null) {
+                // Intent cannot be resolved - try finding package name first
+                val tmmPackageName = findInstalledTmmPackage()
+                if (tmmPackageName == null) {
+                    LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM app not found. Please install Trimble Mobile Manager")
+                    Toast.makeText(
+                        this,
+                        "TMM not found. Please install Trimble Mobile Manager and sign in",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return
+                }
+                // Set package if found
+                intent.setPackage(tmmPackageName)
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "Using detected TMM package: $tmmPackageName")
+            } else {
+                // Intent resolved successfully - TMM is installed
+                val packageName = resolveInfo.activityInfo.packageName
+                intent.setPackage(packageName)
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM found via intent resolution: $packageName")
+            }
+            
             startActivity(intent)
-            LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM login Intent launched successfully from Activity")
+            LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM login Intent launched successfully")
             // NOTE: TMM may not show login UI if:
             // - User is already authenticated (this is expected)
             // - TMM version disables forced login
@@ -559,9 +630,30 @@ class MainActivity : ComponentActivity() {
                 updateTmmLoginStatus()
             }, 2000) // Wait 2 seconds for TMM to update SharedPreferences
         } catch (e: android.content.ActivityNotFoundException) {
-            LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM login Activity not found - user may already be logged in")
-            // Don't show error - TMM might be installed but login activity not available
-            // This is OK - SDK will handle subscription loading
+            // Try one more time with package name detection
+            val tmmPackageName = findInstalledTmmPackage()
+            if (tmmPackageName != null) {
+                try {
+                    val intent = Intent("com.trimble.tmm.LOGIN").apply {
+                        setPackage(tmmPackageName)
+                        putExtra("applicationID", packageName)
+                        putExtra("receiverName", "Catalyst")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                    LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM login Intent launched with package: $tmmPackageName")
+                } catch (e2: Exception) {
+                    LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM login Activity not found - user may already be logged in: ${e2.message}")
+                    // Continue anyway - SDK will handle subscription loading
+                }
+            } else {
+                LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM not found. Please install Trimble Mobile Manager")
+                Toast.makeText(
+                    this,
+                    "TMM not found. Please install Trimble Mobile Manager",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         } catch (e: SecurityException) {
             LogCapture.log(android.util.Log.WARN, "MainActivity", "Security exception launching TMM login: ${e.message}")
             // Don't show error - continue anyway
