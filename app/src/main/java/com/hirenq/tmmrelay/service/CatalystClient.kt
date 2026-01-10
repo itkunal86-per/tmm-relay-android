@@ -1,7 +1,6 @@
 package com.hirenq.tmmrelay.service
 
 import android.content.Context
-import android.content.Intent
 import android.util.Log
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
@@ -217,28 +216,15 @@ class CatalystClient(
             val appGuid = context.packageName
             facade = CatalystFacade(appGuid, context.applicationContext)
 
-            /* ---------------- Launch TMM Login ---------------- */
-            try {
-                val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
-                    putExtra("applicationID", appGuid)
-                    putExtra("receiverName", "Catalyst")
-                    putExtra("noInstall", false)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-
-                context.startActivity(loginIntent)
-                LogCapture.log(Log.INFO, TAG, "TMM login intent sent")
-
-            } catch (e: Exception) {
-                LogCapture.log(Log.WARN, TAG, "Could not launch TMM login UI (may already be logged in)", e)
-            }
-
             /* ---------------- Load Subscription ---------------- */
+            // User must manually log into TMM app first (outside this app)
+            // SDK will talk to TMM internally via system services
             LogCapture.log(Log.INFO, TAG, "Loading subscription...")
             facade!!.loadSubscription()
             LogCapture.log(Log.INFO, TAG, "Subscription load() called - SDK will handle the result")
 
             /* ---------------- Get Sensor Properties ---------------- */
+            // Licensing is applied automatically by SDK
             facade!!.getSensorProperties()
             LogCapture.log(Log.INFO, TAG, "getSensorProperties() called - SDK will handle licensing")
 
