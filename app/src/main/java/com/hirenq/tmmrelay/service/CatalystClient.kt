@@ -187,7 +187,8 @@ class CatalystClient(
         }
 
         override fun onUsbConnectionErrorOccured() {
-            Log.e(TAG, "USB connection error occurred")
+            LogCapture.log(Log.ERROR, TAG, "USB connection error occurred")
+            currentError = "USB_CONNECTION_ERROR"
             isConnected = false
             sdkConnected = false
             lastDataReceivedAt = null
@@ -195,7 +196,7 @@ class CatalystClient(
         }
 
         override fun onSubscriptionHasExpired() {
-            Log.e(TAG, "Subscription has expired")
+            LogCapture.log(Log.ERROR, TAG, "Subscription has expired")
             currentError = "NO_SUBSCRIPTION"
             isConnected = false
             sdkConnected = false

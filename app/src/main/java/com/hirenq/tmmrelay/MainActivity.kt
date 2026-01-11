@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private var hasRequestedPermissions = false
+    private var lastShownError: String? = null
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -102,7 +103,7 @@ class MainActivity : ComponentActivity() {
         }    
         updateStatusUI("Stopped", "", "")
         binding.tvDiagnostics.text = "Waiting for diagnostics..."
-        
+
         binding.btnStart.setOnClickListener {
             // Check if all permissions are granted before starting
             if (!hasAllCriticalPermissions()) {
@@ -118,6 +119,15 @@ class MainActivity : ComponentActivity() {
                 return@setOnClickListener
             }
 
+            // Check if TMM is installed before starting
+            val tmmPackageName = findInstalledTmmPackage()
+            if (tmmPackageName == null) {
+                val message = "Trimble Mobile Manager is not installed. Please install TMM from the Play Store and sign in before starting the relay."
+                LogCapture.log(android.util.Log.ERROR, "MainActivity", message)
+                showErrorAlert("TMM Not Installed", message)
+                return@setOnClickListener
+            }
+            
             startRelayService()
         }
 
@@ -130,34 +140,18 @@ class MainActivity : ComponentActivity() {
         binding.btnAccessLog.setOnClickListener {
             startActivity(Intent(this, LogViewerActivity::class.java))
         }
-
-        binding.btnOpenTmm.setOnClickListener {
-            val tmmPackages = listOf(
-                "com.trimble.mobilemanager",
-                "com.trimble.tmm",
-                "com.trimble.trimblemobilemanager",
-                "com.trimble.tmm.enterprise"
-            )
-            
-            var opened = false
-            for (pkg in tmmPackages) {
-                val intent = packageManager.getLaunchIntentForPackage(pkg)
-                if (intent != null) {
-                    startActivity(intent)
-                    opened = true
-                    LogCapture.log(android.util.Log.INFO, "MainActivity", "Opened TMM app: $pkg")
-                    break
-                }
-            }
-            
-            if (!opened) {
-                Toast.makeText(
-                    this,
-                    "Trimble Mobile Manager not found",
-                    Toast.LENGTH_SHORT
-                ).show()
-                LogCapture.log(android.util.Log.WARN, "MainActivity", "Could not open TMM - no package found")
-            }
+    }
+    
+    // ---------------- ALERT DIALOGS ----------------
+    
+    private fun showErrorAlert(title: String, message: String) {
+        runOnUiThread {
+            android.app.AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton("OK", null)
+                .setCancelable(true)
+                .show()
         }
     }
 
@@ -377,8 +371,73 @@ class MainActivity : ComponentActivity() {
             binding.tvErrorStatus.setTextColor(
                 ContextCompat.getColor(this, android.R.color.holo_red_dark)
             )
+            
+            // Show alert for errors (but only once per error type)
+            if (lastShownError != error) {
+                lastShownError = error
+                when (error) {
+                    "NO_SUBSCRIPTION" -> {
+                        val message = "Subscription not found. Please sign in to Trimble Mobile Manager and ensure you have an active subscription."
+                        LogCapture.log(android.util.Log.ERROR, "MainActivity", message)
+                        showErrorAlert("Subscription Not Found", message)
+                    }
+                    "NOT_LICENSED" -> {
+                        val message = "Device is not licensed. Please check your Trimble Mobile Manager subscription and device licensing."
+                        LogCapture.log(android.util.Log.ERROR, "MainActivity", message)
+                        showErrorAlert("No Licensing", message)
+                    }
+                    "CONNECT_FAILED", "DRIVER_INIT_FAILED" -> {
+                        val message = "Trimble DA2 device not connected via Bluetooth. Please ensure:\n\n1. Device is powered on\n2. Bluetooth is enabled\n3. Device is paired and connected\n4. TMM app can see the device"
+                        LogCapture.log(android.util.Log.ERROR, "MainActivity", message)
+                        showErrorAlert("Device Not Connected", message)
+                    }
+                    "USB connection error", "USB_CONNECTION_ERROR" -> {
+                        val message = "USB connection error. Please check the USB connection to the Trimble device."
+                        LogCapture.log(android.util.Log.ERROR, "MainActivity", message)
+                        showErrorAlert("USB Connection Error", message)
+                    }
+                    "INIT_FAILED" -> {
+                        val message = "Initialization failed. Please check your device connection and try again."
+                        LogCapture.log(android.util.Log.ERROR, "MainActivity", message)
+                        showErrorAlert("Initialization Failed", message)
+                    }
+                    else -> {
+                        // Check if error message contains keywords for better detection
+                        val errorUpper = error.uppercase()
+                        when {
+                            errorUpper.contains("LICENSE") || errorUpper.contains("NOT_LICENSED") -> {
+                                val message = "Device is not licensed. Please check your Trimble Mobile Manager subscription and device licensing."
+                                LogCapture.log(android.util.Log.ERROR, "MainActivity", message)
+                                showErrorAlert("No Licensing", message)
+                            }
+                            errorUpper.contains("SUBSCRIPTION") || errorUpper.contains("NO_SUBSCRIPTION") -> {
+                                val message = "Subscription not found. Please sign in to Trimble Mobile Manager and ensure you have an active subscription."
+                                LogCapture.log(android.util.Log.ERROR, "MainActivity", message)
+                                showErrorAlert("Subscription Not Found", message)
+                            }
+                            errorUpper.contains("CONNECT") || errorUpper.contains("BLUETOOTH") -> {
+                                val message = "Trimble DA2 device not connected via Bluetooth. Please ensure:\n\n1. Device is powered on\n2. Bluetooth is enabled\n3. Device is paired and connected\n4. TMM app can see the device"
+                                LogCapture.log(android.util.Log.ERROR, "MainActivity", message)
+                                showErrorAlert("Device Not Connected", message)
+                            }
+                            else -> {
+                                val message = "Error: $error"
+                                LogCapture.log(android.util.Log.ERROR, "MainActivity", message)
+                                showErrorAlert("Connection Error", message)
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             binding.tvErrorStatus.visibility = android.view.View.GONE
+            lastShownError = null // Reset when error clears
+        }
+        
+        // Also check connection status and show alert if not connected (but no error)
+        if (!isConnected && error == null) {
+            // Don't show alert immediately, wait a bit to see if connection establishes
+            // This is handled by the error state above
         }
     }
 
