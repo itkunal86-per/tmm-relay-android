@@ -120,8 +120,25 @@ class MainActivity : ComponentActivity() {
             }
 
             // Check if TMM is installed before starting
-            val tmmPackageName = findInstalledTmmPackage()
-            if (tmmPackageName == null) {
+            // Use a simpler check - just try to get launch intent for known packages
+            val tmmPackages = listOf(
+                "com.trimble.mobilemanager",
+                "com.trimble.tmm",
+                "com.trimble.trimblemobilemanager",
+                "com.trimble.tmm.enterprise"
+            )
+            
+            var tmmFound = false
+            for (pkg in tmmPackages) {
+                val launchIntent = packageManager.getLaunchIntentForPackage(pkg)
+                if (launchIntent != null) {
+                    tmmFound = true
+                    LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM detected: $pkg")
+                    break
+                }
+            }
+            
+            if (!tmmFound) {
                 val message = "Trimble Mobile Manager is not installed. Please install TMM from the Play Store and sign in before starting the relay."
                 LogCapture.log(android.util.Log.ERROR, "MainActivity", message)
                 showErrorAlert("TMM Not Installed", message)
@@ -511,50 +528,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         
-        // Method 2: Try to resolve the TMM login intent
-        try {
-            val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
-                putExtra("applicationID", packageName)
-                putExtra("receiverName", "Catalyst")
-            }
-            
-            // Try with MATCH_ALL flag first (Android 11+ might need this)
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                PackageManager.MATCH_ALL or PackageManager.MATCH_DEFAULT_ONLY
-            } else {
-                PackageManager.MATCH_DEFAULT_ONLY
-            }
-            
-            val resolveInfo = pm.queryIntentActivities(loginIntent, flags)
-            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Intent resolution found ${resolveInfo.size} activities")
-            
-            if (resolveInfo.isNotEmpty()) {
-                // Get package name from first resolved activity
-                val resolvedPackageName = resolveInfo[0].activityInfo.packageName
-                LogCapture.log(android.util.Log.INFO, "MainActivity", "Found TMM package via intent resolution: $resolvedPackageName")
-                return resolvedPackageName
-            }
-        } catch (e: Exception) {
-            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Intent resolution failed: ${e.message}", e)
-        }
-        
-        // Method 3: Try resolveActivity method as alternative
-        try {
-            val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
-                putExtra("applicationID", packageName)
-                putExtra("receiverName", "Catalyst")
-            }
-            val resolveInfo = pm.resolveActivity(loginIntent, PackageManager.MATCH_DEFAULT_ONLY)
-            if (resolveInfo != null) {
-                val resolvedPackageName = resolveInfo.activityInfo.packageName
-                LogCapture.log(android.util.Log.INFO, "MainActivity", "Found TMM package via resolveActivity: $resolvedPackageName")
-                return resolvedPackageName
-            }
-        } catch (e: Exception) {
-            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "resolveActivity failed: ${e.message}")
-        }
-        
-        // Method 4: Check known package names using getPackageInfo
+        // Method 2: Check known package names using getPackageInfo
         LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Checking known package names using getPackageInfo: $knownPackages")
         for (pkg in knownPackages) {
             try {
@@ -574,7 +548,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         
-        // Method 5: Search all installed packages for Trimble-related packages
+        // Method 3: Search all installed packages for Trimble-related packages
         try {
             LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Searching all installed packages for Trimble apps...")
             val installedPackages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
