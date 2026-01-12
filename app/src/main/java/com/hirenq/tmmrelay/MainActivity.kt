@@ -381,7 +381,7 @@ class MainActivity : ComponentActivity() {
             append(if (bluetoothGranted) "✔ Bluetooth\n\n" else "✘ Bluetooth\n\n")
 
             append("Receiver:\n")
-            append(if (isConnected) "✔ Connected\n" else "✘ Not Connected\n")
+            append(if (isConnected) "✔ Connected\n" else "✘ Not Connected- Survey Not Started\n")
             append("Battery: ${receiverBattery?.let { "$it%" } ?: "N/A"}\n")
             
             // Display error if present

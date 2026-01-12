@@ -18,6 +18,8 @@ import trimble.jssi.android.catalystfacade.SensorProperties
 import trimble.jssi.android.catalystfacade.SensorStateEvent
 import trimble.jssi.android.catalystfacade.ImuStateEvent
 import trimble.jssi.interfaces.gnss.PositionRate
+import org.json.JSONArray
+import org.json.JSONObject
 import java.time.Instant
 import kotlin.math.PI
 
@@ -336,6 +338,9 @@ class CatalystClient(
                 else -> "OK"
             }
             
+            // Build full survey data JSON array from PositionUpdate
+            val surveyDataArray = buildSurveyDataArray(position)
+            
             val payload = TelemetryPayload(
                 tenantId = tenantId,
                 deviceId = deviceId,
@@ -359,15 +364,134 @@ class CatalystClient(
                 mobileLongitude = null,
                 mobileAccuracy = null,
                 mobileBattery = null,
-                dataSource = "TRIMBLE" // This payload is from Trimble receiver
+                dataSource = "TRIMBLE", // This payload is from Trimble receiver
+                surveyData = surveyDataArray
             )
             
             onMessage(payload)
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error creating telemetry payload", e)
-            Log.e(TAG, "Exception details: ${e.message}", e)
+            LogCapture.log(Log.ERROR, TAG, "Error creating telemetry payload", e)
+            LogCapture.log(Log.ERROR, TAG, "Exception details: ${e.message}", e)
             onError(e)
+        }
+    }
+    
+    private fun buildSurveyDataArray(position: PositionUpdate): String {
+        return try {
+            val surveyObj = JSONObject()
+            
+            // Basic position data
+            try { surveyObj.put("latitude", position.getLatitude() * 180.0 / PI) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting latitude for survey data: ${e.message}") }
+            try { surveyObj.put("longitude", position.getLongitude() * 180.0 / PI) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting longitude for survey data: ${e.message}") }
+            try { surveyObj.put("height", position.getHeight()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting height: ${e.message}") }
+            try { surveyObj.put("elevation", position.getElevation()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting elevation: ${e.message}") }
+            
+            // Solution and fix data
+            try { surveyObj.put("solution", position.getSolution()?.toString()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting solution: ${e.message}") }
+            try { surveyObj.put("groundPositionType", position.getGroundPositionType()?.toString()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting groundPositionType: ${e.message}") }
+            
+            // Precision and accuracy
+            try { surveyObj.put("hPrecision", position.getHPrecision()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting hPrecision: ${e.message}") }
+            try { surveyObj.put("vPrecision", position.getVPrecision()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting vPrecision: ${e.message}") }
+            try { surveyObj.put("sigmaSemiMajorAxis", position.getSigmaSemiMajorAxis()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting sigmaSemiMajorAxis: ${e.message}") }
+            try { surveyObj.put("sigmaSemiMinorAxis", position.getSigmaSemiMinorAxis()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting sigmaSemiMinorAxis: ${e.message}") }
+            try { surveyObj.put("sigmaOrientation", position.getSigmaOrientation() * 180.0 / PI) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting sigmaOrientation: ${e.message}") }
+            
+            // DOP values
+            try { surveyObj.put("pdop", position.getPdop()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting pdop: ${e.message}") }
+            try { surveyObj.put("hdop", position.getHdop()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting hdop: ${e.message}") }
+            try { surveyObj.put("vdop", position.getVdop()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting vdop: ${e.message}") }
+            
+            // IMU and orientation data
+            try { surveyObj.put("imuState", position.getInertialMeasurementUnitState()?.toString()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting imuState: ${e.message}") }
+            try { surveyObj.put("pitch", position.getPitch() * 180.0 / PI) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting pitch: ${e.message}") }
+            try { surveyObj.put("roll", position.getRoll() * 180.0 / PI) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting roll: ${e.message}") }
+            try { surveyObj.put("yaw", position.getYaw() * 180.0 / PI) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting yaw: ${e.message}") }
+            try { surveyObj.put("pitchPrecision", position.getPitchPrecision() * 180.0 / PI) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting pitchPrecision: ${e.message}") }
+            try { surveyObj.put("rollPrecision", position.getRollPrecision() * 180.0 / PI) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting rollPrecision: ${e.message}") }
+            try { surveyObj.put("yawPrecision", position.getYawPrecision() * 180.0 / PI) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting yawPrecision: ${e.message}") }
+            
+            // Satellite data
+            try { surveyObj.put("numberSatellites", position.getNumberSatellites()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting numberSatellites: ${e.message}") }
+            try { surveyObj.put("numberTrackedSatellites", position.getNumberTrackedSatellites()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting numberTrackedSatellites: ${e.message}") }
+            try { surveyObj.put("satellitesInView", latestSatellitesInView) } catch (e: Exception) {}
+            
+            // Correction and RTK data
+            try { surveyObj.put("staticEpochs", position.getStaticEpochs()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting staticEpochs: ${e.message}") }
+            try { surveyObj.put("correctionAge", position.getCorrectionAge()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting correctionAge: ${e.message}") }
+            try { surveyObj.put("receivedCorrectionData", position.getReceivedCorrectionData()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting receivedCorrectionData: ${e.message}") }
+            try { surveyObj.put("stationId", position.getStationId()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting stationId: ${e.message}") }
+            
+            // Reference frame data
+            try { surveyObj.put("datumTransformationApplied", position.getDatumTransformationApplied()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting datumTransformationApplied: ${e.message}") }
+            try { 
+                val refFrame = position.getReferenceFrame()
+                if (refFrame != null) {
+                    surveyObj.put("referenceFrame", refFrame.toString())
+                }
+            } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting referenceFrame: ${e.message}") }
+            try { 
+                val sourceRefFrame = position.getSourceReferenceFrame()
+                if (sourceRefFrame != null) {
+                    surveyObj.put("sourceReferenceFrame", sourceRefFrame.toString())
+                }
+            } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting sourceReferenceFrame: ${e.message}") }
+            
+            // Time data
+            try { surveyObj.put("gpsTime", position.getGpsTime()?.toString()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting gpsTime: ${e.message}") }
+            try { surveyObj.put("utcTime", position.getUtcTime()?.toString()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting utcTime: ${e.message}") }
+            
+            // Geoid model
+            try { surveyObj.put("geoidModel", position.getGeoidModel()) } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting geoidModel: ${e.message}") }
+            
+            // Battery data if available
+            try {
+                latestBattery?.let {
+                    surveyObj.put("receiverBatteryLevel", it.getBatteryLevel())
+                    surveyObj.put("receiverCharging", it.isCharging())
+                }
+            } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting battery data: ${e.message}") }
+            
+            // Sensor health if available
+            try {
+                latestHealth?.let {
+                    surveyObj.put("sensorState", it.getSensorState()?.toString())
+                }
+            } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error getting sensor state: ${e.message}") }
+            
+            // Satellite details if available
+            try {
+                latestSatellites?.let { satUpdate ->
+                    val satellitesArray = JSONArray()
+                    try {
+                        val satellites = satUpdate.getSatellites()
+                        satellites.forEach { sat ->
+                            try {
+                                val satObj = JSONObject()
+                                satObj.put("prn", sat.getPrn())
+                                satObj.put("constellation", sat.getConstellation()?.toString())
+                                satObj.put("elevation", sat.getElevation() * 180.0 / PI)
+                                satObj.put("azimuth", sat.getAzimuth() * 180.0 / PI)
+                                satObj.put("snr", sat.getSnr())
+                                satObj.put("used", sat.isUsed())
+                                satellitesArray.put(satObj)
+                            } catch (e: Exception) {
+                                LogCapture.log(Log.WARN, TAG, "Error adding satellite to array: ${e.message}")
+                            }
+                        }
+                        surveyObj.put("satellites", satellitesArray)
+                    } catch (e: Exception) {
+                        LogCapture.log(Log.WARN, TAG, "Error getting satellites list: ${e.message}")
+                    }
+                }
+            } catch (e: Exception) { LogCapture.log(Log.WARN, TAG, "Error processing satellite update: ${e.message}") }
+            
+            // Return as JSON array string (wrapping the object in an array)
+            JSONArray().apply { put(surveyObj) }.toString()
+        } catch (e: Exception) {
+            LogCapture.log(Log.ERROR, TAG, "Error building survey data array: ${e.message}", e)
+            "[]" // Return empty array on error
         }
     }
 

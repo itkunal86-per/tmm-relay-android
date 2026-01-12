@@ -79,6 +79,18 @@ object ApiClient {
             put("MobileBattery", payload.mobileBattery ?: JSONObject.NULL)
             put("MobileBatteryHealth", payload.mobileBatteryHealth ?: JSONObject.NULL)
             put("DataSource", payload.dataSource ?: JSONObject.NULL)
+            
+            // Survey data - full DA2 survey data as JSON array
+            if (payload.surveyData != null) {
+                try {
+                    put("SurveyData", JSONArray(payload.surveyData))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing surveyData JSON: ${e.message}", e)
+                    put("SurveyData", JSONObject.NULL)
+                }
+            } else {
+                put("SurveyData", JSONObject.NULL)
+            }
         }
 
         val jsonString = json.toString()

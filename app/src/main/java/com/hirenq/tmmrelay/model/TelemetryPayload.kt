@@ -27,5 +27,6 @@ data class TelemetryPayload(
     val mobileAccuracy: Double? = null,
     val mobileBattery: Int? = null, // Same as battery, but explicitly included
     val mobileBatteryHealth: String? = null, // Android device battery health (GOOD, DEAD, OVERHEAT, etc.)
-    val dataSource: String? = null // "TRIMBLE" or "MOBILE_GPS" to indicate primary data source
+    val dataSource: String? = null, // "TRIMBLE" or "MOBILE_GPS" to indicate primary data source
+    val surveyData: String? = null // JSON array string containing full DA2 survey data
 )
