@@ -173,7 +173,12 @@ class MainActivity : ComponentActivity() {
                 ) == PackageManager.PERMISSION_GRANTED
             else true
 
-        return location && bluetoothConnect && bluetoothScan && notifications
+        val readPhoneState =
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.READ_PHONE_STATE
+            ) == PackageManager.PERMISSION_GRANTED
+
+        return location && bluetoothConnect && bluetoothScan && notifications && readPhoneState
     }
     
     private fun shouldRedirectToSettings(): Boolean {
@@ -208,7 +213,14 @@ class MainActivity : ComponentActivity() {
                 !shouldShowRequestPermissionRationale(Manifest.permission.BLUETOOTH_SCAN)
             } else false
         
-        return locationPermanentlyDenied || bluetoothConnectPermanentlyDenied || bluetoothScanPermanentlyDenied
+        val readPhoneStateDenied = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.READ_PHONE_STATE
+        ) != PackageManager.PERMISSION_GRANTED
+
+        val readPhoneStatePermanentlyDenied = readPhoneStateDenied &&
+            !shouldShowRequestPermissionRationale(Manifest.permission.READ_PHONE_STATE)
+        
+        return locationPermanentlyDenied || bluetoothConnectPermanentlyDenied || bluetoothScanPermanentlyDenied || readPhoneStatePermanentlyDenied
     }
     
     private fun showPermissionSettingsDialog() {
@@ -456,6 +468,9 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             required.add(Manifest.permission.POST_NOTIFICATIONS)
         }
+
+        // Request READ_PHONE_STATE (required by SDK)
+        required.add(Manifest.permission.READ_PHONE_STATE)
 
         val missing = required.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
