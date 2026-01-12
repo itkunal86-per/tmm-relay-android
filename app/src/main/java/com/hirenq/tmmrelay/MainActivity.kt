@@ -26,6 +26,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var binding: ActivityMainBinding
     private var hasRequestedPermissions = false
     private var lastShownError: String? = null
+    
+    // Track previous states to detect transitions
+    private var previousSubscriptionAvailable: Boolean = false
+    private var previousLicenseAvailable: Boolean = false
+    private var previousReceiverConnected: Boolean = false
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -249,29 +254,51 @@ class MainActivity : ComponentActivity() {
     
     override fun onResume() {
         super.onResume()
+        LogCapture.log(android.util.Log.INFO, "MainActivity", "=== onResume() started ===")
+        
         try {
+            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Section 1: Registering status receiver")
             LocalBroadcastManager.getInstance(this).registerReceiver(
                 statusReceiver,
                 IntentFilter(TmmRelayService.ACTION_STATUS_UPDATE)
             )
+            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Status receiver registered successfully")
+            
+            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Section 2: Registering diagnostics receiver")
             LocalBroadcastManager.getInstance(this).registerReceiver(
                 diagnosticsReceiver,
                 IntentFilter(TmmRelayService.ACTION_DIAGNOSTICS_UPDATE)
             )
+            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Diagnostics receiver registered successfully")
 
             // Request all permissions when app opens for the first time
+            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Section 3: Checking if permissions have been requested (hasRequestedPermissions: $hasRequestedPermissions)")
             if (!hasRequestedPermissions) {
-                LogCapture.log(android.util.Log.INFO, "MainActivity", "Requesting permissions on app open (onResume)...")
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "Permissions not yet requested - requesting permissions on app open (onResume)...")
                 ensurePermissions()
                 hasRequestedPermissions = true
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "Permission request initiated, hasRequestedPermissions set to true")
+            } else {
+                LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Permissions already requested previously, skipping permission request")
             }
             
             // Start service on resume to trigger subscription and license detection
-            if (hasAllCriticalPermissions()) {
-                LogCapture.log(android.util.Log.INFO, "MainActivity", "App resumed - starting service for subscription/license detection")
+            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Section 4: Checking critical permissions before starting service")
+            val hasCriticalPermissions = hasAllCriticalPermissions()
+            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Critical permissions check result: $hasCriticalPermissions")
+            
+            if (hasCriticalPermissions) {
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "All critical permissions granted - starting service for subscription/license detection")
                 startRelayService()
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "Service start initiated")
+            } else {
+                LogCapture.log(android.util.Log.WARN, "MainActivity", "Critical permissions missing - cannot start service. Please grant required permissions.")
             }
-        } catch (_: Exception) {}
+            
+            LogCapture.log(android.util.Log.INFO, "MainActivity", "=== onResume() completed successfully ===")
+        } catch (e: Exception) {
+            LogCapture.log(android.util.Log.ERROR, "MainActivity", "Error in onResume(): ${e.message}", e)
+        }
     }
 
     override fun onPause() {
@@ -443,10 +470,56 @@ class MainActivity : ComponentActivity() {
             lastShownError = null // Reset when error clears
         }
         
-        // Also check connection status and show alert if not connected (but no error)
-        if (!isConnected && error == null) {
-            // Don't show alert immediately, wait a bit to see if connection establishes
-            // This is handled by the error state above
+        // Check availability status and show success alerts when they become available
+        checkAndShowAvailabilityAlerts(isConnected, error)
+    }
+    
+    private fun checkAndShowAvailabilityAlerts(isConnected: Boolean, error: String?) {
+        // Determine current availability states
+        val subscriptionAvailable = error != "NO_SUBSCRIPTION" && (error == null || !error.uppercase().contains("SUBSCRIPTION"))
+        val licenseAvailable = error != "NOT_LICENSED" && (error == null || !error.uppercase().contains("LICENSE") || !error.uppercase().contains("NOT_LICENSED"))
+        val receiverConnected = isConnected
+        
+        // Check for state transitions and show alerts
+        // Subscription became available
+        if (subscriptionAvailable && !previousSubscriptionAvailable && error == null) {
+            val message = "✅ Subscription is available and active."
+            LogCapture.log(android.util.Log.INFO, "MainActivity", message)
+            showSuccessAlert("Subscription Available", message)
+            previousSubscriptionAvailable = true
+        } else if (!subscriptionAvailable) {
+            previousSubscriptionAvailable = false
+        }
+        
+        // License became available
+        if (licenseAvailable && !previousLicenseAvailable && error == null && isConnected) {
+            val message = "✅ License is available and validated."
+            LogCapture.log(android.util.Log.INFO, "MainActivity", message)
+            showSuccessAlert("License Available", message)
+            previousLicenseAvailable = true
+        } else if (!licenseAvailable) {
+            previousLicenseAvailable = false
+        }
+        
+        // DA2 Receiver became connected
+        if (receiverConnected && !previousReceiverConnected && error == null) {
+            val message = "✅ Trimble DA2 receiver is connected and available."
+            LogCapture.log(android.util.Log.INFO, "MainActivity", message)
+            showSuccessAlert("DA2 Receiver Connected", message)
+            previousReceiverConnected = true
+        } else if (!receiverConnected) {
+            previousReceiverConnected = false
+        }
+    }
+    
+    private fun showSuccessAlert(title: String, message: String) {
+        runOnUiThread {
+            android.app.AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton("OK", null)
+                .setCancelable(true)
+                .show()
         }
     }
 
