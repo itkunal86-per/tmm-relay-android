@@ -218,8 +218,8 @@ class CatalystClient(
     return when (result)
      {
 
-        is ReturnObject -> {
-            if (result.code != ReturnCode.Success) {
+        is ReturnObject<*> -> {
+            if (result.code != DriverReturnCode.Success) {
                 LogCapture.log(
                     Log.ERROR,
                     TAG,
@@ -266,7 +266,7 @@ class CatalystClient(
     }
 
 
-     fun connect(tenantId: String, deviceId: String) {
+    fun connect(tenantId: String, deviceId: String) {
     this.tenantId = tenantId
     this.deviceId = deviceId
 
