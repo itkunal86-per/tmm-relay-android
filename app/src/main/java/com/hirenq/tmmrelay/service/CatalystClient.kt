@@ -17,6 +17,7 @@ import trimble.jssi.android.catalystfacade.SatelliteUpdate
 import trimble.jssi.android.catalystfacade.SensorProperties
 import trimble.jssi.android.catalystfacade.SensorStateEvent
 import trimble.jssi.android.catalystfacade.ImuStateEvent
+import trimble.jssi.android.catalystfacade.TargetReferenceFrame
 import trimble.jssi.interfaces.gnss.PositionRate
 import org.json.JSONArray
 import org.json.JSONObject
@@ -258,8 +259,13 @@ class CatalystClient(
             facade!!.setOutputPositionRate(PositionRate.OneHz)
 
             /* ---------------- Start Survey ---------------- */
-            facade!!.startSurvey()
-            LogCapture.log(Log.INFO, TAG, "Survey started")
+            // Start Trimble Correction Hub survey using TMM local settings
+            val surveyRc = facade!!.startTrimbleCorrectionHubSurvey(TargetReferenceFrame.UseLocalSettings)
+            if (surveyRc.code != DriverReturnCode.Success) {
+                LogCapture.log(Log.WARN, TAG, "Survey start returned: ${surveyRc.code}, but continuing...")
+            } else {
+                LogCapture.log(Log.INFO, TAG, "Survey started successfully")
+            }
 
             sdkConnected = true
             LogCapture.log(Log.INFO, TAG, "=== Catalyst SDK connected and survey started ===")
