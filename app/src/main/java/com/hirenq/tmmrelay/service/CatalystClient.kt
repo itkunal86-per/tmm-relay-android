@@ -257,8 +257,12 @@ class CatalystClient(
             /* ---------------- Output Rate ---------------- */
             facade!!.setOutputPositionRate(PositionRate.OneHz)
 
+            /* ---------------- Start Survey ---------------- */
+            facade!!.startSurvey()
+            LogCapture.log(Log.INFO, TAG, "Survey started")
+
             sdkConnected = true
-            LogCapture.log(Log.INFO, TAG, "=== Catalyst SDK connected ===")
+            LogCapture.log(Log.INFO, TAG, "=== Catalyst SDK connected and survey started ===")
 
         } catch (e: Exception) {
             LogCapture.log(Log.ERROR, TAG, "Fatal connect error: ${e.message}", e)
