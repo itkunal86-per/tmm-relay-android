@@ -41,12 +41,18 @@ class CatalystClient(
     
     fun getConnectionStatus(): Boolean {
         // Only consider connected if we've received data recently (within last 30 seconds)
-        return if (lastDataReceivedAt != null) {
-            val secondsSinceLastData = java.time.Duration.between(lastDataReceivedAt, Instant.now()).seconds
-            sdkConnected && secondsSinceLastData < 30
-        } else {
-            false
-        }
+        //return if (lastDataReceivedAt != null) {
+         //   val secondsSinceLastData = java.time.Duration.between(lastDataReceivedAt, Instant.now()).seconds
+           // sdkConnected && secondsSinceLastData < 30
+        //} else {
+       //     false
+       // }
+
+       return sdkConnected
+    }
+    fun isGnssActive(): Boolean {
+         return lastDataReceivedAt != null &&
+           java.time.Duration.between(lastDataReceivedAt, Instant.now()).seconds < 30
     }
     fun getCurrentError(): String? = currentError
     
@@ -220,6 +226,9 @@ class CatalystClient(
             val appGuid = context.packageName
             facade = CatalystFacade(appGuid, context.applicationContext)
 
+               /* ---------------- Listener ---------------- */
+            facade!!.addCatalystEventListener(eventListener)
+
             /* ---------------- Load Subscription ---------------- */
             // User must manually log into TMM app first (outside this app)
             // SDK will talk to TMM internally via system services
@@ -252,20 +261,12 @@ class CatalystClient(
             }
             LogCapture.log(Log.INFO, TAG, "Connected to sensor")
 
-            /* ---------------- Listener ---------------- */
-            facade!!.addCatalystEventListener(eventListener)
+         
 
             /* ---------------- Output Rate ---------------- */
             facade!!.setOutputPositionRate(PositionRate.OneHz)
 
-            /* ---------------- Start Survey ---------------- */
-            // Start Trimble Correction Hub survey using TMM local settings
-            val surveyRc = facade!!.startTrimbleCorrectionHubSurvey(TargetReferenceFrame.UseLocalSettings)
-            if (surveyRc.code != DriverReturnCode.Success) {
-                LogCapture.log(Log.WARN, TAG, "Survey start returned: ${surveyRc.code}, but continuing...")
-            } else {
-                LogCapture.log(Log.INFO, TAG, "Survey started successfully")
-            }
+           
 
             sdkConnected = true
             LogCapture.log(Log.INFO, TAG, "=== Catalyst SDK connected and survey started ===")
@@ -534,13 +535,13 @@ class CatalystClient(
             if (sdkConnected && facade != null) {
                 try {
                     // Only end survey if one was started
-                    facade?.endSurvey()
+                  //  facade?.endSurvey()
                 } catch (e: Exception) {
                     Log.w(TAG, "Error ending survey (may not be started)", e)
                 }
                 
                 try {
-                    facade?.disconnectFromSensor()
+                   // facade?.disconnectFromSensor()
                 } catch (e: Exception) {
                     Log.w(TAG, "Error disconnecting from sensor", e)
                 }
@@ -552,13 +553,13 @@ class CatalystClient(
             currentError = null
             
             try {
-                facade?.removeCatalystEventListener(eventListener)
+              //  facade?.removeCatalystEventListener(eventListener)
             } catch (e: Exception) {
                 Log.w(TAG, "Error removing event listener", e)
             }
             
             try {
-                facade?.releaseDriver()
+              //  facade?.releaseDriver()
             } catch (e: Exception) {
                 Log.w(TAG, "Error releasing driver", e)
             }
