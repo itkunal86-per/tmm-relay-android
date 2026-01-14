@@ -473,12 +473,34 @@ class CatalystClient(
                         satellites.forEach { sat ->
                             try {
                                 val satObj = JSONObject()
-                                satObj.put("prn", sat.getPrn())
-                                satObj.put("constellation", sat.getConstellation()?.toString())
-                                satObj.put("elevation", sat.getElevation() * 180.0 / PI)
-                                satObj.put("azimuth", sat.getAzimuth() * 180.0 / PI)
-                                satObj.put("snr", sat.getSnr())
-                                satObj.put("used", sat.isUsed())
+                                // Use available methods from ISatellite interface
+                                try { satObj.put("satelliteTypeChar", sat.getSatelliteTypeChar().toString()) } catch (e: Exception) {}
+                                try { satObj.put("enabled", sat.getEnabled()) } catch (e: Exception) {}
+                                try { satObj.put("used", sat.getUsed()) } catch (e: Exception) {}
+                                // Try to get additional properties using reflection for methods that may exist
+                                try { 
+                                    val elevationMethod = sat.javaClass.getMethod("getElevation")
+                                    val elevation = elevationMethod.invoke(sat) as? Double
+                                    if (elevation != null) satObj.put("elevation", elevation * 180.0 / PI)
+                                } catch (e: Exception) {}
+                                try {
+                                    val azimuthMethod = sat.javaClass.getMethod("getAzimuth")
+                                    val azimuth = azimuthMethod.invoke(sat) as? Double
+                                    if (azimuth != null) satObj.put("azimuth", azimuth * 180.0 / PI)
+                                } catch (e: Exception) {}
+                                try { 
+                                    val prnMethod = sat.javaClass.getMethod("getPrn")
+                                    satObj.put("prn", prnMethod.invoke(sat))
+                                } catch (e: Exception) {}
+                                try {
+                                    val constMethod = sat.javaClass.getMethod("getConstellation")
+                                    val constellation = constMethod.invoke(sat)
+                                    if (constellation != null) satObj.put("constellation", constellation.toString())
+                                } catch (e: Exception) {}
+                                try {
+                                    val snrMethod = sat.javaClass.getMethod("getSnr")
+                                    satObj.put("snr", snrMethod.invoke(sat))
+                                } catch (e: Exception) {}
                                 satellitesArray.put(satObj)
                             } catch (e: Exception) {
                                 LogCapture.log(Log.WARN, TAG, "Error adding satellite to array: ${e.message}")
