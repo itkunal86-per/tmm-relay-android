@@ -214,6 +214,58 @@ class CatalystClient(
         }
     }
 
+    private fun logReturn(action: String, result: Any?): Boolean {
+    return when (result)
+     {
+
+        is ReturnObject -> {
+            if (result.code != ReturnCode.Success) {
+                LogCapture.log(
+                    Log.ERROR,
+                    TAG,
+                    "❌ $action failed → ${result.code}"
+                )
+                false
+            } else {
+                LogCapture.log(
+                    Log.INFO,
+                    TAG,
+                    "✅ $action success"
+                )
+                true
+            }
+        }
+
+        is DriverReturnCode -> {
+            if (result != DriverReturnCode.Success) {
+                LogCapture.log(
+                    Log.ERROR,
+                    TAG,
+                    "❌ $action failed → $result"
+                )
+                false
+            } else {
+                LogCapture.log(
+                    Log.INFO,
+                    TAG,
+                    "✅ $action success"
+                )
+                true
+            }
+        }
+
+        else -> {
+            LogCapture.log(
+                Log.WARN,
+                TAG,
+                "⚠ $action returned unknown result type"
+            )
+            true
+        }
+     }
+    }
+
+
      fun connect(tenantId: String, deviceId: String) {
     this.tenantId = tenantId
     this.deviceId = deviceId
@@ -227,20 +279,22 @@ class CatalystClient(
             facade = CatalystFacade(appGuid, context.applicationContext)
 
                /* ---------------- Listener ---------------- */
-            facade!!.addCatalystEventListener(eventListener)
+            logReturn("addCatalystEventListener",facade!!.addCatalystEventListener(eventListener))
 
             /* ---------------- Load Subscription ---------------- */
             // User must manually log into TMM app first (outside this app)
             // SDK will talk to TMM internally via system services
             LogCapture.log(Log.INFO, TAG, "Loading subscription...")
-            facade!!.loadSubscription()
-            LogCapture.log(Log.INFO, TAG, "Subscription load() called - SDK will handle the result")
+              LogCapture.log(Log.INFO, TAG, "Subscription load() called - SDK will handle the result")
 
+             logReturn("loadSubscription",facade!!.loadSubscription())
+          
             /* ---------------- Get Sensor Properties ---------------- */
             // Licensing is applied automatically by SDK
-            facade!!.getSensorProperties()
             LogCapture.log(Log.INFO, TAG, "getSensorProperties() called - SDK will handle licensing")
 
+            logReturn("getSensorProperties",facade!!.getSensorProperties())
+           
             /* ---------------- Init Driver ---------------- */
             val initRc = facade!!.initDriver(DriverType.Catalyst)
             if (initRc.code != DriverReturnCode.Success) {
@@ -264,7 +318,7 @@ class CatalystClient(
          
 
             /* ---------------- Output Rate ---------------- */
-            facade!!.setOutputPositionRate(PositionRate.OneHz)
+             logReturn("setOutputPositionRate",facade!!.setOutputPositionRate(PositionRate.OneHz))
 
            
 
