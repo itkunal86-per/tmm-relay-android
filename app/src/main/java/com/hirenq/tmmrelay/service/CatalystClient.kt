@@ -267,71 +267,109 @@ class CatalystClient(
 
 
     fun connect(tenantId: String, deviceId: String) {
-    this.tenantId = tenantId
-    this.deviceId = deviceId
+        this.tenantId = tenantId
+        this.deviceId = deviceId
 
-    Thread {
-        try {
-            LogCapture.log(Log.INFO, TAG, "=== Catalyst connect() start ===")
+        Thread {
+            try {
+                LogCapture.log(Log.INFO, TAG, "=== Catalyst connect() start ===")
 
-            /* ---------------- Create Facade ---------------- */
-            val appGuid = context.packageName
-            facade = CatalystFacade(appGuid, context.applicationContext)
+                /* ---------------- Step 1: Create Facade ---------------- */
+                val appGuid = context.packageName
+                facade = CatalystFacade(appGuid, context.applicationContext)
+                LogCapture.log(Log.INFO, TAG, "✅ Facade created")
 
-               /* ---------------- Listener ---------------- */
-            logReturn("addCatalystEventListener",facade!!.addCatalystEventListener(eventListener))
+                /* ---------------- Step 2: Load Subscription ---------------- */
+                LogCapture.log(Log.INFO, TAG, "Loading subscription...")
+                val loadSubRc = facade!!.loadSubscription()
+                if (loadSubRc.code != DriverReturnCode.Success) {
+                    LogCapture.log(Log.ERROR, TAG, "❌ Load subscription failed: ${loadSubRc.code}")
+                    currentError = "NO_SUBSCRIPTION"
+                    onError(RuntimeException("Load subscription failed: ${loadSubRc.code}"))
+                    return@Thread
+                } else {
+                    LogCapture.log(Log.INFO, TAG, "✅ Load subscription success")
+                }
 
-            /* ---------------- Load Subscription ---------------- */
-            // User must manually log into TMM app first (outside this app)
-            // SDK will talk to TMM internally via system services
-            LogCapture.log(Log.INFO, TAG, "Loading subscription...")
-              LogCapture.log(Log.INFO, TAG, "Subscription load() called - SDK will handle the result")
+                /* ---------------- Step 3: Init Driver ---------------- */
+                LogCapture.log(Log.INFO, TAG, "Initializing driver...")
+                val initRc = facade!!.initDriver(DriverType.Catalyst)
+                if (initRc.code != DriverReturnCode.Success) {
+                    LogCapture.log(Log.ERROR, TAG, "❌ Driver init failed: ${initRc.code}")
+                    currentError = "DRIVER_INIT_FAILED"
+                    onError(RuntimeException("Driver init failed: ${initRc.code}"))
+                    return@Thread
+                } else {
+                    LogCapture.log(Log.INFO, TAG, "✅ Driver init success")
+                }
 
-             logReturn("loadSubscription",facade!!.loadSubscription())
-          
-            /* ---------------- Get Sensor Properties ---------------- */
-            // Licensing is applied automatically by SDK
-            LogCapture.log(Log.INFO, TAG, "getSensorProperties() called - SDK will handle licensing")
+                /* ---------------- Step 4: Connect ---------------- */
+                LogCapture.log(Log.INFO, TAG, "Connecting to sensor...")
+                var retCode: ReturnCode = ReturnCode(DriverReturnCode.Error)
+                val driverType = DriverType.Catalyst
+                
+                if (driverType == DriverType.Catalyst || 
+                    driverType == DriverType.EM100 || 
+                    driverType == DriverType.TDC150) {
+                    retCode = facade!!.connect()
+                }
+                
+                if (retCode.code != DriverReturnCode.Success) {
+                    LogCapture.log(Log.ERROR, TAG, "❌ Connect failed: ${retCode.code}")
+                    currentError = "CONNECT_FAILED"
+                    onError(RuntimeException("Connect failed: ${retCode.code}"))
+                    return@Thread
+                } else {
+                    LogCapture.log(Log.INFO, TAG, "✅ Connect success")
+                }
 
-            logReturn("getSensorProperties",facade!!.getSensorProperties())
-           
-            /* ---------------- Init Driver ---------------- */
-            val initRc = facade!!.initDriver(DriverType.Catalyst)
-            if (initRc.code != DriverReturnCode.Success) {
-                LogCapture.log(Log.ERROR, TAG, "Driver init failed: ${initRc.code}")
-                currentError = "DRIVER_INIT_FAILED"
-                onError(RuntimeException("Driver init failed: ${initRc.code}"))
-                return@Thread
+                /* ---------------- Step 5: Get Sensor Properties and Check License ---------------- */
+                LogCapture.log(Log.INFO, TAG, "Getting sensor properties...")
+                val sensorPropsRc = facade!!.getSensorProperties()
+                if (sensorPropsRc.code != DriverReturnCode.Success) {
+                    LogCapture.log(Log.ERROR, TAG, "❌ Get sensor properties failed: ${sensorPropsRc.code}")
+                    facade!!.disconnectFromSensor()
+                    currentError = "NOT_LICENSED"
+                    onError(RuntimeException("Get sensor properties failed: ${sensorPropsRc.code}"))
+                    return@Thread
+                } else {
+                    val sensorProperties = sensorPropsRc.returnedObject
+                    if (sensorProperties.isLicensed()) {
+                        LogCapture.log(Log.INFO, TAG, "✅ Get sensor properties success - Instrument licensed")
+                        LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
+                    } else {
+                        LogCapture.log(Log.ERROR, TAG, "❌ Instrument is not licensed")
+                        facade!!.disconnectFromSensor()
+                        currentError = "NOT_LICENSED"
+                        onError(RuntimeException("Instrument is not licensed"))
+                        return@Thread
+                    }
+                }
+
+                /* ---------------- Step 6: Add Event Listener (only after license check) ---------------- */
+                LogCapture.log(Log.INFO, TAG, "Adding event listener...")
+                facade!!.addCatalystEventListener(eventListener)
+                LogCapture.log(Log.INFO, TAG, "✅ Event listener added")
+
+                /* ---------------- Step 7: Set Output Rate ---------------- */
+                LogCapture.log(Log.INFO, TAG, "Setting output position rate...")
+                val rateRc = facade!!.setOutputPositionRate(PositionRate.OneHz)
+                if (rateRc.code != DriverReturnCode.Success) {
+                    LogCapture.log(Log.ERROR, TAG, "❌ Set output position rate failed: ${rateRc.code}")
+                } else {
+                    LogCapture.log(Log.INFO, TAG, "✅ Set output position rate success")
+                }
+
+                sdkConnected = true
+                LogCapture.log(Log.INFO, TAG, "=== Catalyst SDK connected successfully ===")
+
+            } catch (e: Exception) {
+                LogCapture.log(Log.ERROR, TAG, "❌ Fatal connect error: ${e.message}", e)
+                currentError = "INIT_FAILED"
+                onError(e)
             }
-            LogCapture.log(Log.INFO, TAG, "Driver initialized successfully")
-
-            /* ---------------- Connect ---------------- */
-            val connectRc = facade!!.connect()
-            if (connectRc.code != DriverReturnCode.Success) {
-                LogCapture.log(Log.ERROR, TAG, "Connect failed: ${connectRc.code}")
-                currentError = "CONNECT_FAILED"
-                onError(RuntimeException("Connect failed: ${connectRc.code}"))
-                return@Thread
-            }
-            LogCapture.log(Log.INFO, TAG, "Connected to sensor")
-
-         
-
-            /* ---------------- Output Rate ---------------- */
-             logReturn("setOutputPositionRate",facade!!.setOutputPositionRate(PositionRate.OneHz))
-
-           
-
-            sdkConnected = true
-            LogCapture.log(Log.INFO, TAG, "=== Catalyst SDK connected and survey started ===")
-
-        } catch (e: Exception) {
-            LogCapture.log(Log.ERROR, TAG, "Fatal connect error: ${e.message}", e)
-            currentError = "INIT_FAILED"
-            onError(e)
-        }
-    }.start()
-}
+        }.start()
+    }
 
     
     fun createAndSendTelemetry() {
