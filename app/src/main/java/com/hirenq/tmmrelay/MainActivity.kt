@@ -590,10 +590,19 @@ class MainActivity : ComponentActivity() {
 
     private fun isTmmInstalledAndVisible(ctx: Context): Boolean {
         return try {
-            ctx.packageManager.getPackageInfo(
-                "com.trimble.mobilemanager",
-                PackageManager.PackageInfoFlags.of(0)
-            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                // API 33+ uses PackageInfoFlags
+                ctx.packageManager.getPackageInfo(
+                    "com.trimble.mobilemanager",
+                    PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                // API < 33 uses int flags
+                ctx.packageManager.getPackageInfo(
+                    "com.trimble.mobilemanager",
+                    0
+                )
+            }
             true
         } catch (e: Exception) {
             false
