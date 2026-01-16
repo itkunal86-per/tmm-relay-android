@@ -390,27 +390,48 @@ class CatalystClient(
             }
         }.start()
     }
-    override fun onSensorStateChanged(state: SensorState) {
-    LogCapture.log(Log.INFO, TAG, "Sensor state changed: $state")
-}
-private fun waitForLicense(
+    
+   private fun waitForLicense(
     facade: CatalystFacade,
-    timeoutMs: Long = 7000,
-    intervalMs: Long = 500
+    timeoutMs: Long = 12000,   // 🔴 increased
+    intervalMs: Long = 1000
 ): Boolean {
+
+    // Give SDK a short head start after connect + listener attach
+    Thread.sleep(1000)
+
     val start = System.currentTimeMillis()
+    var attempt = 0
 
     while (System.currentTimeMillis() - start < timeoutMs) {
+        attempt++
+
         val rc = facade.getSensorProperties()
-        if (rc.code == DriverReturnCode.Success) {
+
+        if (rc.code == DriverReturnCode.Success && rc.returnedObject != null) {
             val sp = rc.returnedObject
-            LogCapture.log(Log.INFO, TAG, "License check → ${sp.isLicensed()}")
-            if (sp.isLicensed()) {
+            val licensed = sp.isLicensed()
+
+            LogCapture.log(
+                Log.INFO,
+                TAG,
+                "License check #$attempt → licensed=$licensed, serial=${sp.serialNumber}"
+            )
+
+            if (licensed) {
                 return true
             }
+        } else {
+            LogCapture.log(
+                Log.WARN,
+                TAG,
+                "License check #$attempt → getSensorProperties failed: ${rc.code}"
+            )
         }
+
         Thread.sleep(intervalMs)
     }
+
     return false
 }
 
