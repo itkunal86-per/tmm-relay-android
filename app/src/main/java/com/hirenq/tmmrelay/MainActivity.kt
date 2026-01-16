@@ -100,6 +100,9 @@ class MainActivity : ComponentActivity() {
         // Initialize crash handler to catch all uncaught exceptions
         CrashHandler.init()
         
+        // Check if TMM is installed and visible at startup
+        checkTmmInstallation()
+        
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
        
@@ -189,7 +192,7 @@ class MainActivity : ComponentActivity() {
                 this, Manifest.permission.READ_PHONE_STATE
             ) == PackageManager.PERMISSION_GRANTED
 
-        return location && bluetoothConnect && bluetoothScan && notifications && readPhoneState
+        return location &&  coarseLocation && bluetoothConnect && bluetoothScan && notifications && readPhoneState
     }
     
     private fun shouldRedirectToSettings(): Boolean {
@@ -580,6 +583,29 @@ class MainActivity : ComponentActivity() {
             ContextCompat.startForegroundService(this, intent)
         } else {
             startService(intent)
+        }
+    }
+
+    // ---------------- TMM INSTALLATION CHECK ----------------
+
+    private fun isTmmInstalledAndVisible(ctx: Context): Boolean {
+        return try {
+            ctx.packageManager.getPackageInfo(
+                "com.trimble.mobilemanager",
+                PackageManager.PackageInfoFlags.of(0)
+            )
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun checkTmmInstallation() {
+        val isInstalled = isTmmInstalledAndVisible(this)
+        if (isInstalled) {
+            LogCapture.log(android.util.Log.INFO, "MainActivity", "✅ TMM (com.trimble.mobilemanager) is installed and visible")
+        } else {
+            LogCapture.log(android.util.Log.WARN, "MainActivity", "❌ TMM (com.trimble.mobilemanager) is NOT installed or not visible")
         }
     }
 }
