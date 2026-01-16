@@ -25,6 +25,10 @@
         <package android:name="com.trimble.mobilemanager" />
         <package android:name="com.trimble.tmm" />
         <package android:name="com.trimble.tmm.enterprise" />
+        <package android:name="com.trimble.bluebottle" />
+		<package android:name="com.trimble.trimblemobilemanager" />
+		<package android:name="com.trimble.empower.em100msp" />
+		<package android:name="com.trimble.empower.em120msp" />
     </queries>
 
 
