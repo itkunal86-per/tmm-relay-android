@@ -323,6 +323,13 @@ class CatalystClient(
                     LogCapture.log(Log.INFO, TAG, "✅ Connect success")
                 }
 
+                /* 🔴 REQUIRED IN 2025.12.5 — ADD LISTENER IMMEDIATELY */
+                LogCapture.log(Log.INFO, TAG, "Adding event listener (early)...")
+                facade!!.addCatalystEventListener(eventListener)
+
+                /* Give IPC a moment */
+                Thread.sleep(300)
+
                 /* ---------------- Step 5: Get Sensor Properties and Check License ---------------- */
                 LogCapture.log(Log.INFO, TAG, "Getting sensor properties...")
             //    val sensorPropsRc = facade!!.getSensorProperties()
@@ -360,9 +367,9 @@ class CatalystClient(
                  }
 
                 /* ---------------- Step 6: Add Event Listener (only after license check) ---------------- */
-                LogCapture.log(Log.INFO, TAG, "Adding event listener...")
-                facade!!.addCatalystEventListener(eventListener)
-                LogCapture.log(Log.INFO, TAG, "✅ Event listener added")
+              //  LogCapture.log(Log.INFO, TAG, "Adding event listener...")
+               // facade!!.addCatalystEventListener(eventListener)
+              //  LogCapture.log(Log.INFO, TAG, "✅ Event listener added")
 
                 /* ---------------- Step 7: Set Output Rate ---------------- */
                 LogCapture.log(Log.INFO, TAG, "Setting output position rate...")
