@@ -593,13 +593,13 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 // API 33+ uses PackageInfoFlags
                 ctx.packageManager.getPackageInfo(
-                    "com.trimble.mobilemanager",
+                    "com.trimble.trimblemobilemanager",
                     PackageManager.PackageInfoFlags.of(0)
                 )
             } else {
                 // API < 33 uses int flags
                 ctx.packageManager.getPackageInfo(
-                    "com.trimble.mobilemanager",
+                    "com.trimble.trimblemobilemanager",
                     0
                 )
             }
@@ -615,9 +615,9 @@ class MainActivity : ComponentActivity() {
         
         val isInstalled = isTmmInstalledAndVisible(this)
         if (isInstalled) {
-            LogCapture.log(android.util.Log.INFO, "MainActivity", "✅ TMM (com.trimble.mobilemanager) is installed and visible")
+            LogCapture.log(android.util.Log.INFO, "MainActivity", "✅ TMM (com.trimble.trimblemobilemanager) is installed and visible")
         } else {
-            LogCapture.log(android.util.Log.WARN, "MainActivity", "❌ TMM (com.trimble.mobilemanager) is NOT installed or not visible")
+            LogCapture.log(android.util.Log.WARN, "MainActivity", "❌ TMM (com.trimble.trimblemobilemanager) is NOT installed or not visible")
         }
     }
     private fun dumpTrimblePackages(ctx: Context) {
