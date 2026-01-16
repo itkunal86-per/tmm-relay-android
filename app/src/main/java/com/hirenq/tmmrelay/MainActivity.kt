@@ -610,11 +610,25 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkTmmInstallation() {
+        // Dump all Trimble-related packages
+        dumpTrimblePackages(this)
+        
         val isInstalled = isTmmInstalledAndVisible(this)
         if (isInstalled) {
             LogCapture.log(android.util.Log.INFO, "MainActivity", "✅ TMM (com.trimble.mobilemanager) is installed and visible")
         } else {
             LogCapture.log(android.util.Log.WARN, "MainActivity", "❌ TMM (com.trimble.mobilemanager) is NOT installed or not visible")
         }
+    }
+    private fun dumpTrimblePackages(ctx: Context) {
+        val pm = ctx.packageManager
+        val packages = pm.getInstalledPackages(PackageManager.GET_META_DATA)
+            .filter { it.packageName.contains("trimble", true) }
+
+        packages.forEach {
+           // Log.i(TAG, "Found package: ${it.packageName}")
+             LogCapture.log(android.util.Log.INFO, "MainActivity", "Found package: ${it.packageName}")
+       
+          }
     }
 }
