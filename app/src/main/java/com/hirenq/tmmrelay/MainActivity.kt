@@ -157,6 +157,12 @@ class MainActivity : ComponentActivity() {
                 this, Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
 
+        val coarseLocation =
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+
+
         val bluetoothConnect =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
                 ContextCompat.checkSelfPermission(

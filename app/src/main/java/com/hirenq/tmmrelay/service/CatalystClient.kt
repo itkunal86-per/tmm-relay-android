@@ -312,8 +312,7 @@ class CatalystClient(
                     driverType == DriverType.EM100 || 
                     driverType == DriverType.TDC150) {
                     retCode = facade!!.connect()
-                    val status = facade!!.getDriverStatus()
-                    LogCapture.log(Log.INFO, TAG, "Driver status → $status")
+                    
                 }
                 
                 if (retCode.code != DriverReturnCode.Success) {
