@@ -390,6 +390,9 @@ class CatalystClient(
             }
         }.start()
     }
+    override fun onSensorStateChanged(state: SensorState) {
+    LogCapture.log(Log.INFO, TAG, "Sensor state changed: $state")
+}
 private fun waitForLicense(
     facade: CatalystFacade,
     timeoutMs: Long = 7000,
