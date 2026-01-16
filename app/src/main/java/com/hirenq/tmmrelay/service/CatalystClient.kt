@@ -325,26 +325,39 @@ class CatalystClient(
 
                 /* ---------------- Step 5: Get Sensor Properties and Check License ---------------- */
                 LogCapture.log(Log.INFO, TAG, "Getting sensor properties...")
-                val sensorPropsRc = facade!!.getSensorProperties()
-                if (sensorPropsRc.code != DriverReturnCode.Success) {
-                    LogCapture.log(Log.ERROR, TAG, "❌ Get sensor properties failed: ${sensorPropsRc.code}")
+            //    val sensorPropsRc = facade!!.getSensorProperties()
+              //  if (sensorPropsRc.code != DriverReturnCode.Success) {
+              //      LogCapture.log(Log.ERROR, TAG, "❌ Get sensor properties failed: ${sensorPropsRc.code}")
+              //      facade!!.disconnectFromSensor()
+              //      currentError = "NOT_LICENSED"
+              //      onError(RuntimeException("Get sensor properties failed: ${sensorPropsRc.code}"))
+              //      return@Thread
+              //  } else {
+               //     val sensorProperties = sensorPropsRc.returnedObject
+              //      if (sensorProperties.isLicensed()) {
+              //          LogCapture.log(Log.INFO, TAG, "✅ Get sensor properties success - Instrument licensed")
+               //         LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
+               //     } else {
+               //         LogCapture.log(Log.ERROR, TAG, "❌ Instrument is not licensed")
+               //         facade!!.disconnectFromSensor()
+               //         currentError = "NOT_LICENSED"
+               //         onError(RuntimeException("Instrument is not licensed"))
+                //        return@Thread
+               //     }
+               // }
+
+               if (waitForLicense(facade!!))
+                  {
+                    val sp = facade!!.getSensorProperties().returnedObject
+                    LogCapture.log(Log.INFO, TAG, "✅ Licensed: ${sp.instrumentName}:${sp.serialNumber}")
+                  }
+             else {
+                    LogCapture.log(Log.ERROR, TAG, "❌ License not granted within timeout")
                     facade!!.disconnectFromSensor()
                     currentError = "NOT_LICENSED"
-                    onError(RuntimeException("Get sensor properties failed: ${sensorPropsRc.code}"))
+                    onError(RuntimeException("Instrument license timeout"))
                     return@Thread
-                } else {
-                    val sensorProperties = sensorPropsRc.returnedObject
-                    if (sensorProperties.isLicensed()) {
-                        LogCapture.log(Log.INFO, TAG, "✅ Get sensor properties success - Instrument licensed")
-                        LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
-                    } else {
-                        LogCapture.log(Log.ERROR, TAG, "❌ Instrument is not licensed")
-                        facade!!.disconnectFromSensor()
-                        currentError = "NOT_LICENSED"
-                        onError(RuntimeException("Instrument is not licensed"))
-                        return@Thread
-                    }
-                }
+                 }
 
                 /* ---------------- Step 6: Add Event Listener (only after license check) ---------------- */
                 LogCapture.log(Log.INFO, TAG, "Adding event listener...")
@@ -370,6 +383,26 @@ class CatalystClient(
             }
         }.start()
     }
+private fun waitForLicense(
+    facade: CatalystFacade,
+    timeoutMs: Long = 7000,
+    intervalMs: Long = 500
+): Boolean {
+    val start = System.currentTimeMillis()
+
+    while (System.currentTimeMillis() - start < timeoutMs) {
+        val rc = facade.getSensorProperties()
+        if (rc.code == DriverReturnCode.Success) {
+            val sp = rc.returnedObject
+            LogCapture.log(Log.INFO, TAG, "License check → ${sp.isLicensed()}")
+            if (sp.isLicensed()) {
+                return true
+            }
+        }
+        Thread.sleep(intervalMs)
+    }
+    return false
+}
 
     
     fun createAndSendTelemetry() {
