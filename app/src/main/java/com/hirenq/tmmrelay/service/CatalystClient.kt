@@ -50,11 +50,11 @@ class CatalystClient(
     
     // Config property keys (matching MainModel.java lines 171-175)
     companion object {
-        private const val DriverType = "DriverType"
-        private const val ConnectionType = "ConnectionType"
-        private const val DeviceAddress = "DeviceAddress"
-        private const val DeviceName = "DeviceName"
-        private const val DevicePortNo = "DevicePortNo"
+        private const val CONFIG_KEY_DRIVER_TYPE = "DriverType"
+        private const val CONFIG_KEY_CONNECTION_TYPE = "ConnectionType"
+        private const val CONFIG_KEY_DEVICE_ADDRESS = "DeviceAddress"
+        private const val CONFIG_KEY_DEVICE_NAME = "DeviceName"
+        private const val CONFIG_KEY_DEVICE_PORT_NO = "DevicePortNo"
     }
     
     // Read configuration from file (matching MainModel.java readConfig() lines 965-991)
@@ -88,11 +88,11 @@ class CatalystClient(
     private fun createDefaultConfig() {
         LogCapture.log(Log.INFO, TAG, "Creating default configuration")
         val properties = Properties()
-        properties.setProperty(DriverType, DriverType.TrimbleGNSS.name) // Default to TrimbleGNSS (matching demo line 996)
-        properties.setProperty(ConnectionType, "Bluetooth")
-        properties.setProperty(DeviceAddress, "")
-        properties.setProperty(DeviceName, "")
-        properties.setProperty(DevicePortNo, "")
+        properties.setProperty(CONFIG_KEY_DRIVER_TYPE, trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS.name) // Default to TrimbleGNSS (matching demo line 996)
+        properties.setProperty(CONFIG_KEY_CONNECTION_TYPE, "Bluetooth")
+        properties.setProperty(CONFIG_KEY_DEVICE_ADDRESS, "")
+        properties.setProperty(CONFIG_KEY_DEVICE_NAME, "")
+        properties.setProperty(CONFIG_KEY_DEVICE_PORT_NO, "")
         writeConfigToFile(properties)
     }
     
@@ -121,12 +121,12 @@ class CatalystClient(
     
     // Parse driver type from Properties (matching MainModel.java parseDriverType() lines 730-742)
     private fun parseDriverType(config: Properties): DriverType? {
-        val deviceTypeStr = config.getProperty(DriverType)
+        val deviceTypeStr = config.getProperty(CONFIG_KEY_DRIVER_TYPE)
         if (deviceTypeStr == null) {
             return null
         }
         return try {
-            DriverType.valueOf(deviceTypeStr)
+            trimble.jssi.android.catalystfacade.DriverType.valueOf(deviceTypeStr)
         } catch (e: IllegalArgumentException) {
             null
         }
@@ -135,19 +135,19 @@ class CatalystClient(
     // Get driver type with default (matching MainModel.java getDriverType() lines 577-585)
     private fun getDriverType(deviceTypeStr: String?): DriverType {
         if (deviceTypeStr == null) {
-            return DriverType.TrimbleGNSS // Default (matching demo line 582)
+            return trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS // Default (matching demo line 582)
         }
         return try {
-            DriverType.valueOf(deviceTypeStr)
+            trimble.jssi.android.catalystfacade.DriverType.valueOf(deviceTypeStr)
         } catch (e: IllegalArgumentException) {
-            DriverType.TrimbleGNSS // Default if invalid (matching demo line 582)
+            trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS // Default if invalid (matching demo line 582)
         }
     }
     
     // Validate connection configuration based on driver type (matching Configuration.java logic)
     private fun validateConnectionConfig(driverType: DriverType, connectionType: String?, deviceAddress: String?, devicePortNo: String?): Boolean {
         // TrimbleGNSS and SpectraPrecision require connection configuration
-        if (driverType == DriverType.TrimbleGNSS || driverType == DriverType.SpectraPrecision) {
+        if (driverType == trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS || driverType == trimble.jssi.android.catalystfacade.DriverType.SpectraPrecision) {
             if (connectionType == null || deviceAddress == null) {
                 LogCapture.log(Log.ERROR, TAG, "TrimbleGNSS/SpectraPrecision drivers require connection configuration (ConnectionType, DeviceAddress)")
                 return false
@@ -164,7 +164,7 @@ class CatalystClient(
                 }
                 "TcpIp" -> {
                     // TcpIp is only valid for TrimbleGNSS (not SpectraPrecision)
-                    if (driverType == DriverType.SpectraPrecision) {
+                    if (driverType == trimble.jssi.android.catalystfacade.DriverType.SpectraPrecision) {
                         LogCapture.log(Log.ERROR, TAG, "TcpIp connection is only supported for TrimbleGNSS, not SpectraPrecision")
                         return false
                     }
@@ -488,7 +488,7 @@ class CatalystClient(
                 // Read driver type from config (matching MainModel.java line 598)
                 // In demo: DriverType driverType = readDriverTypeFromConfig();
                 // We get it from config directly since we already have it
-                val deviceTypeStr = config.getProperty(DriverType)
+                val deviceTypeStr = config.getProperty(CONFIG_KEY_DRIVER_TYPE)
                 val driverType = getDriverType(deviceTypeStr) // Defaults to TrimbleGNSS if null or invalid (matching demo line 582)
                 
                 LogCapture.log(Log.INFO, TAG, "Driver type from config: $driverType (config value: ${deviceTypeStr ?: "null"})")
@@ -509,19 +509,21 @@ class CatalystClient(
                     // Log driver mapping info (matching CatalystFacade.java deviceTypeMap lines 412-423)
                     // and getDriver() switch statement (lines 428-446)
                     when (driverType) {
-                        DriverType.TrimbleGNSS, DriverType.EM100 -> {
+                        trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS, 
+                        trimble.jssi.android.catalystfacade.DriverType.EM100 -> {
                             LogCapture.log(Log.INFO, TAG, "Driver loaded: Trimble.Ssi.Driver.CarpoBased.Driver.RSeries")
                             LogCapture.log(Log.INFO, TAG, "License name: TrimbleRSeries")
                         }
-                        DriverType.Catalyst -> {
+                        trimble.jssi.android.catalystfacade.DriverType.Catalyst -> {
                             LogCapture.log(Log.INFO, TAG, "Driver registered: CatalystDriver (via registerDriver)")
                             LogCapture.log(Log.INFO, TAG, "License name: TrimbleCatalyst")
                         }
-                        DriverType.Mock -> {
+                        trimble.jssi.android.catalystfacade.DriverType.Mock -> {
                             LogCapture.log(Log.INFO, TAG, "Driver loaded: Trimble.Ssi.Driver.Mock.GNSS")
                             LogCapture.log(Log.INFO, TAG, "License name: TrimbleMockGNSS")
                         }
-                        DriverType.SpectraPrecision, DriverType.TDC150 -> {
+                        trimble.jssi.android.catalystfacade.DriverType.SpectraPrecision, 
+                        trimble.jssi.android.catalystfacade.DriverType.TDC150 -> {
                             LogCapture.log(Log.INFO, TAG, "Driver loaded: Trimble.Ssi.Driver.CarpoBased.Driver.SP80")
                             LogCapture.log(Log.INFO, TAG, "License name: SpectraPrecisionGNSS")
                         }
@@ -533,9 +535,9 @@ class CatalystClient(
 
                 /* ---------------- Step 5: Read Connection Config from Config File ---------------- */
                 // Read connection configuration from config file (matching MainModel.java line 596)
-                val connectionType = config.getProperty(ConnectionType)
-                val deviceAddress = config.getProperty(DeviceAddress)
-                val devicePortNo = config.getProperty(DevicePortNo)
+                val connectionType = config.getProperty(CONFIG_KEY_CONNECTION_TYPE)
+                val deviceAddress = config.getProperty(CONFIG_KEY_DEVICE_ADDRESS)
+                val devicePortNo = config.getProperty(CONFIG_KEY_DEVICE_PORT_NO)
                 
                 LogCapture.log(Log.INFO, TAG, "Connection config from file: Type=$connectionType, Address=$deviceAddress, Port=$devicePortNo")
                 
@@ -545,15 +547,15 @@ class CatalystClient(
                 
                 // Handle different driver types matching MainModel.java pattern using when statement (lines 603-627)
                 when (driverType) {
-                    DriverType.Catalyst,
-                    DriverType.EM100,
-                    DriverType.TDC150 -> {
+                    trimble.jssi.android.catalystfacade.DriverType.Catalyst,
+                    trimble.jssi.android.catalystfacade.DriverType.EM100,
+                    trimble.jssi.android.catalystfacade.DriverType.TDC150 -> {
                         LogCapture.log(Log.INFO, TAG, "Connecting via standard connection (Catalyst/EM100/TDC150)...")
                         retCode = facade!!.connect()
                     }
                     
-                    DriverType.TrimbleGNSS,
-                    DriverType.SpectraPrecision -> {
+                    trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS,
+                    trimble.jssi.android.catalystfacade.DriverType.SpectraPrecision -> {
                         // Validate connection configuration (matching Configuration.java updateConnectionTypes logic)
                         // - TrimbleGNSS: supports both Bluetooth and TcpIp
                         // - SpectraPrecision: supports only Bluetooth (not TcpIp)
@@ -587,7 +589,7 @@ class CatalystClient(
                         }
                     }
                     
-                    DriverType.Mock -> {
+                    trimble.jssi.android.catalystfacade.DriverType.Mock -> {
                         LogCapture.log(Log.INFO, TAG, "Connecting via Mock driver...")
                         retCode = facade!!.connectMock()
                     }
