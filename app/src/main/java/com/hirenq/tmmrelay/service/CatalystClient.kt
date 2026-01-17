@@ -31,7 +31,7 @@ class CatalystClient(
     private val onError: (Throwable) -> Unit = {},
     private val driverType: DriverType = DriverType.Catalyst, // Default to Catalyst, can be changed to DriverType.Mock
     // Connection configuration for TrimbleGNSS/SpectraPrecision drivers
-    private val connectionType: String? = null, // "Bluetooth" or "TcpIp"
+    private val connectionType: String? = null, // "Bluetooth" or "TcpIp" - validated based on driver type
     private val deviceAddress: String? = null,  // Bluetooth address or IP address
     private val devicePortNo: String? = null,   // Port number for TcpIp connection
     // Device license subscription (alternative to TMM subscription)
@@ -39,6 +39,50 @@ class CatalystClient(
 ) {
 
     private val TAG = "CatalystClient"
+    
+    // Validate connection configuration based on driver type (matching Configuration.java logic)
+    private fun validateConnectionConfig(): Boolean {
+        // TrimbleGNSS and SpectraPrecision require connection configuration
+        if (driverType == DriverType.TrimbleGNSS || driverType == DriverType.SpectraPrecision) {
+            if (connectionType == null || deviceAddress == null) {
+                LogCapture.log(Log.ERROR, TAG, "TrimbleGNSS/SpectraPrecision drivers require connection configuration (ConnectionType, DeviceAddress)")
+                return false
+            }
+            
+            // Validate connection type based on driver type (matching updateConnectionTypes logic)
+            when (connectionType) {
+                "Bluetooth" -> {
+                    // Bluetooth is valid for both TrimbleGNSS and SpectraPrecision
+                    if (deviceAddress.isBlank()) {
+                        LogCapture.log(Log.ERROR, TAG, "Bluetooth connection requires DeviceAddress")
+                        return false
+                    }
+                }
+                "TcpIp" -> {
+                    // TcpIp is only valid for TrimbleGNSS (not SpectraPrecision)
+                    if (driverType == DriverType.SpectraPrecision) {
+                        LogCapture.log(Log.ERROR, TAG, "TcpIp connection is only supported for TrimbleGNSS, not SpectraPrecision")
+                        return false
+                    }
+                    if (deviceAddress.isBlank() || devicePortNo == null || devicePortNo.isBlank()) {
+                        LogCapture.log(Log.ERROR, TAG, "TcpIp connection requires DeviceAddress and DevicePortNo")
+                        return false
+                    }
+                }
+                else -> {
+                    LogCapture.log(Log.ERROR, TAG, "Invalid ConnectionType: $connectionType. Must be 'Bluetooth' or 'TcpIp'")
+                    return false
+                }
+            }
+        } else {
+            // For other driver types (Catalyst, EM100, TDC150, Mock), connection config is not needed
+            // Log warning if connection config is provided but not needed
+            if (connectionType != null || deviceAddress != null || devicePortNo != null) {
+                LogCapture.log(Log.WARN, TAG, "Connection configuration provided for driver type $driverType, but it's not required. Ignoring connection config.")
+            }
+        }
+        return true
+    }
     private var facade: CatalystFacade? = null
     private var tenantId: String = ""
     private var deviceId: String = ""
@@ -346,29 +390,29 @@ class CatalystClient(
                     
                     DriverType.TrimbleGNSS,
                     DriverType.SpectraPrecision -> {
-                        // TrimbleGNSS/SpectraPrecision require connection configuration
-                        if (connectionType == null || deviceAddress == null) {
-                            LogCapture.log(Log.ERROR, TAG, "TrimbleGNSS/SpectraPrecision drivers require connection configuration (ConnectionType, DeviceAddress)")
+                        // Validate connection configuration (matching Configuration.java updateConnectionTypes logic)
+                        // - TrimbleGNSS: supports both Bluetooth and TcpIp
+                        // - SpectraPrecision: supports only Bluetooth (not TcpIp)
+                        if (!validateConnectionConfig()) {
                             currentError = "CONNECT_FAILED"
-                            onError(RuntimeException("TrimbleGNSS/SpectraPrecision drivers require connection configuration (ConnectionType, DeviceAddress)"))
+                            onError(RuntimeException("Invalid connection configuration for driver type $driverType"))
                             return@Thread
                         }
                         
-                        // Handle connection based on ConnectionType (matching MainModel.java pattern)
+                        // Handle connection based on ConnectionType (matching MainModel.java and Configuration.java pattern)
+                        // At this point, validation ensures:
+                        // - TrimbleGNSS: Bluetooth or TcpIp (both valid)
+                        // - SpectraPrecision: Bluetooth only (TcpIp rejected by validateConnectionConfig)
                         retCode = when (connectionType) {
                             "Bluetooth" -> {
                                 LogCapture.log(Log.INFO, TAG, "Connecting via Bluetooth to address: $deviceAddress")
-                                facade!!.connectViaBluetooth(deviceAddress)
+                                facade!!.connectViaBluetooth(deviceAddress ?: "")
                             }
                             "TcpIp" -> {
-                                if (devicePortNo == null) {
-                                    LogCapture.log(Log.ERROR, TAG, "TcpIp connection requires DevicePortNo")
-                                    currentError = "CONNECT_FAILED"
-                                    onError(RuntimeException("TcpIp connection requires DevicePortNo"))
-                                    return@Thread
-                                }
-                                LogCapture.log(Log.INFO, TAG, "Connecting via WiFi to $deviceAddress:$devicePortNo")
-                                facade!!.connectViaWifi(deviceAddress, devicePortNo)
+                                // TcpIp is only valid for TrimbleGNSS (validated in validateConnectionConfig)
+                                // SpectraPrecision cannot reach here due to validation
+                                LogCapture.log(Log.INFO, TAG, "Connecting via WiFi/TcpIp to $deviceAddress:$devicePortNo")
+                                facade!!.connectViaWifi(deviceAddress ?: "", devicePortNo ?: "")
                             }
                             else -> {
                                 LogCapture.log(Log.ERROR, TAG, "Invalid ConnectionType: $connectionType. Must be 'Bluetooth' or 'TcpIp'")
