@@ -399,7 +399,7 @@ class TmmRelayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Handle reconnect action
         if (intent?.action == ACTION_RECONNECT) {
-            android.util.Log.i("TmmRelayService", "Received reconnect action - reconnecting device...")
+            android.util.Log.i("TmmRelayService", "Received reconnect action - checking if reconnection needed...")
             reconnectCatalystClient()
         }
         
@@ -410,75 +410,117 @@ class TmmRelayService : Service() {
     
     // Reconnect Catalyst client (useful after device name/address changes)
     private fun reconnectCatalystClient() {
-        try {
-            android.util.Log.i("TmmRelayService", "Reconnecting Catalyst client...")
-            
-            // Close existing connection
-            catalystClient?.close()
-            
-            // Wait a bit for cleanup
-            Thread.sleep(500)
-            
-            // Create new client instance
-            val deviceId = DeviceInfoUtil.deviceId(this)
-            val payloadHandler: (TelemetryPayload) -> Unit = { payload ->
-                try {
-                    lastMessageAt = Instant.now()
-
-                    if (payload.latitude != 0.0 || payload.longitude != 0.0) {
-                        lastKnownLatitude = payload.latitude
-                        lastKnownLongitude = payload.longitude
-                        lastKnownFixType = payload.fixType
+        // Run on background thread to avoid blocking
+        Thread {
+            try {
+                android.util.Log.i("TmmRelayService", "=== Checking if reconnection needed ===")
+                
+                // Check if license is already obtained and connection is established
+                val isConnected = catalystClient?.getConnectionStatus() ?: false
+                val currentError = catalystClient?.getCurrentError()
+                
+                // If already connected and no error, don't reconnect
+                if (isConnected && currentError == null) {
+                    android.util.Log.i("TmmRelayService", "✅ License already obtained and device connected. Skipping reconnection.")
+                    handler.post {
+                        broadcastStatusUpdate("Connected", null)
                     }
+                    return@Thread
+                }
+                
+                // If license error exists, we need to reconnect to reload license
+                if (currentError == "NO_SUBSCRIPTION" || currentError == "NO_LICENSE") {
+                    android.util.Log.i("TmmRelayService", "⚠️ License/subscription error detected: $currentError. Will reconnect to reload license.")
+                } else if (currentError != null) {
+                    android.util.Log.i("TmmRelayService", "⚠️ Connection error detected: $currentError. Will reconnect.")
+                } else if (!isConnected) {
+                    android.util.Log.i("TmmRelayService", "⚠️ Not connected. Will reconnect.")
+                }
+                
+                android.util.Log.i("TmmRelayService", "=== Reconnecting Catalyst client (to reload license and reconnect) ===")
+                
+                // Close existing connection
+                android.util.Log.i("TmmRelayService", "Step 1: Closing existing connection...")
+                catalystClient?.close()
+                
+                // Wait a bit for cleanup
+                Thread.sleep(500)
+                android.util.Log.i("TmmRelayService", "Step 1: Existing connection closed")
+                
+                // Create new client instance
+                val deviceId = DeviceInfoUtil.deviceId(this)
+                android.util.Log.i("TmmRelayService", "Step 2: Creating new CatalystClient instance...")
+                
+                val payloadHandler: (TelemetryPayload) -> Unit = { payload ->
+                    try {
+                        lastMessageAt = Instant.now()
 
-                    broadcastDiagnostics(payload)
-
-                    val shouldSendPost =
-                        lastSuccessfulPostAt == null ||
-                            java.time.Duration
-                                .between(lastSuccessfulPostAt, Instant.now())
-                                .toMinutes() >= 5
-
-                    if (shouldSendPost) {
-                        android.util.Log.i("TmmRelayService", "=== Sending POST request with full payload ===")
-                        
-                        val enrichedPayload = enrichPayloadWithMobileGps(payload.copy(deviceId = deviceId))
-                        
-                        ApiClient.send(
-                            enrichedPayload,
-                            apiKey
-                        ) { timestamp, payloadInfo, success ->
-                            android.util.Log.i("TmmRelayService", "POST response: $timestamp - $payloadInfo (success=$success)")
-                            if (success) lastSuccessfulPostAt = Instant.now()
-                            updateNotificationWithPost(timestamp, payloadInfo)
-                            updateDynamicStatus()
+                        if (payload.latitude != 0.0 || payload.longitude != 0.0) {
+                            lastKnownLatitude = payload.latitude
+                            lastKnownLongitude = payload.longitude
+                            lastKnownFixType = payload.fixType
                         }
+
+                        broadcastDiagnostics(payload)
+
+                        val shouldSendPost =
+                            lastSuccessfulPostAt == null ||
+                                java.time.Duration
+                                    .between(lastSuccessfulPostAt, Instant.now())
+                                    .toMinutes() >= 5
+
+                        if (shouldSendPost) {
+                            android.util.Log.i("TmmRelayService", "=== Sending POST request with full payload ===")
+                            
+                            val enrichedPayload = enrichPayloadWithMobileGps(payload.copy(deviceId = deviceId))
+                            
+                            ApiClient.send(
+                                enrichedPayload,
+                                apiKey
+                            ) { timestamp, payloadInfo, success ->
+                                android.util.Log.i("TmmRelayService", "POST response: $timestamp - $payloadInfo (success=$success)")
+                                if (success) lastSuccessfulPostAt = Instant.now()
+                                updateNotificationWithPost(timestamp, payloadInfo)
+                                updateDynamicStatus()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("TmmRelayService", "Error in payloadHandler: ${e.message}", e)
                     }
-                } catch (e: Exception) {
-                    android.util.Log.e("TmmRelayService", "Error in payloadHandler: ${e.message}", e)
+                }
+                
+                catalystClient = CatalystClient(
+                    context = this,
+                    onMessage = payloadHandler,
+                    onError = { error ->
+                        handleCatalystError(error)
+                    }
+                )
+                android.util.Log.i("TmmRelayService", "Step 2: CatalystClient instance created")
+                
+                // Connect with new configuration - this will:
+                // 1. Create Facade
+                // 2. Load Subscription (get license)
+                // 3. Read Config (including new device address from saved name)
+                // 4. Initialize Driver
+                // 5. Connect to device
+                android.util.Log.i("TmmRelayService", "Step 3: Calling connect() to reload license and reconnect...")
+                catalystClient?.connect(tenantId, deviceId)
+                android.util.Log.i("TmmRelayService", "Step 3: connect() call completed - connection process started in background thread")
+                
+                // Broadcast status update on main thread
+                handler.post {
+                    broadcastStatusUpdate("Reconnecting", null)
+                    android.util.Log.i("TmmRelayService", "Reconnection initiated successfully")
+                }
+                
+            } catch (e: Exception) {
+                android.util.Log.e("TmmRelayService", "Error reconnecting Catalyst client: ${e.message}", e)
+                handler.post {
+                    handleCatalystError(e)
                 }
             }
-            
-            catalystClient = CatalystClient(
-                context = this,
-                onMessage = payloadHandler,
-                onError = { error ->
-                    handleCatalystError(error)
-                }
-            )
-            
-            // Connect with new configuration
-            android.util.Log.i("TmmRelayService", "Reconnecting with new device configuration...")
-            catalystClient?.connect(tenantId, deviceId)
-            
-            // Broadcast status update
-            broadcastStatusUpdate("Reconnecting", null)
-            android.util.Log.i("TmmRelayService", "Reconnection initiated successfully")
-            
-        } catch (e: Exception) {
-            android.util.Log.e("TmmRelayService", "Error reconnecting Catalyst client: ${e.message}", e)
-            handleCatalystError(e)
-        }
+        }.start()
     }
 
     override fun onDestroy() {
