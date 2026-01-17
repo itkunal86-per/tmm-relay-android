@@ -35,6 +35,25 @@
             android:paddingBottom="6dp"
             android:elevation="2dp" />
         
+        <Button
+            android:id="@+id/btnSettings"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_toEndOf="@id/btnAccessLog"
+            android:layout_toRightOf="@id/btnAccessLog"
+            android:layout_marginStart="8dp"
+            android:layout_marginLeft="8dp"
+            android:text="Settings"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/white"
+            android:background="#5a5855"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:elevation="2dp" />
+        
         <TextView
             android:id="@+id/tvTmmLoginStatus"
             android:layout_width="wrap_content"

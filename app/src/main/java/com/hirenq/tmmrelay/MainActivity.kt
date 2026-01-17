@@ -139,6 +139,10 @@ class MainActivity : ComponentActivity() {
         binding.btnAccessLog.setOnClickListener {
             startActivity(Intent(this, LogViewerActivity::class.java))
         }
+
+        binding.btnSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
     }
     
     // ---------------- ALERT DIALOGS ----------------

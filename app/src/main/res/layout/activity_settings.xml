@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Bluetooth Device Name"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Enter part of the device name (e.g., 'DA2' or 'Catalyst'). The app will find the MAC address automatically."
+            android:textSize="14sp"
+            android:textColor="@android:color/darker_gray"
+            android:layout_marginBottom="16dp" />
+
+        <EditText
+            android:id="@+id/etDeviceName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Enter device name (e.g., DA2, Catalyst)"
+            android:inputType="text"
+            android:padding="12dp"
+            android:background="@android:drawable/edit_text"
+            android:layout_marginBottom="16dp" />
+
+        <Button
+            android:id="@+id/btnSave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Save Device Name"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#E0E0E0"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Paired Devices"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Click below to see all paired Bluetooth devices on your device."
+            android:textSize="14sp"
+            android:textColor="@android:color/darker_gray"
+            android:layout_marginBottom="16dp" />
+
+        <Button
+            android:id="@+id/btnLoadPairedDevices"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Load Paired Devices"
+            android:textSize="16sp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:id="@+id/tvPairedDevices"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Click 'Load Paired Devices' to see list"
+            android:textSize="14sp"
+            android:padding="12dp"
+            android:background="#F5F5F5"
+            android:fontFamily="monospace"
+            android:scrollbars="vertical" />
+
+    </LinearLayout>
+
+</ScrollView>
+

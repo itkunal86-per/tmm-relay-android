@@ -581,15 +581,38 @@ class CatalystClient(
                 /* ---------------- Step 5: Read Connection Config from Config File ---------------- */
                 // Read connection configuration from config file (matching MainModel.java line 596)
                 val connectionType = config.getProperty(CONFIG_KEY_CONNECTION_TYPE)
-                val deviceAddress = config.getProperty(CONFIG_KEY_DEVICE_ADDRESS)
+                var deviceAddress = config.getProperty(CONFIG_KEY_DEVICE_ADDRESS)
                 val devicePortNo = config.getProperty(CONFIG_KEY_DEVICE_PORT_NO)
                 
                 LogCapture.log(Log.INFO, TAG, "Connection config from file: Type=$connectionType, Address=$deviceAddress, Port=$devicePortNo")
                 
-                // Log warning if Bluetooth connection type but no device address
-                if (connectionType == "Bluetooth" && (deviceAddress.isNullOrBlank())) {
+                // If Bluetooth connection type and device address is empty, try to resolve from saved device name
+                if (connectionType == "Bluetooth" && deviceAddress.isNullOrBlank()) {
+                    LogCapture.log(Log.INFO, TAG, "DeviceAddress is empty, attempting to resolve from saved device name...")
+                    try {
+                        val resolvedAddress = com.hirenq.tmmrelay.util.BluetoothUtil.getBluetoothAddressFromSavedName(context)
+                        if (resolvedAddress != null) {
+                            deviceAddress = resolvedAddress
+                            LogCapture.log(Log.INFO, TAG, "✅ Resolved Bluetooth address from device name: $deviceAddress")
+                            // Update config file with resolved address for future use
+                            config.setProperty(CONFIG_KEY_DEVICE_ADDRESS, deviceAddress)
+                            writeConfigToFile(config)
+                            LogCapture.log(Log.INFO, TAG, "Updated config file with resolved address")
+                        } else {
+                            LogCapture.log(Log.WARN, TAG, "⚠️ WARNING: Could not resolve Bluetooth address from device name!")
+                            LogCapture.log(Log.WARN, TAG, "   Please go to Settings and enter the device name, or set DeviceAddress in config.properties")
+                            LogCapture.log(Log.WARN, TAG, "   Example: DeviceAddress=00:11:22:33:44:55")
+                        }
+                    } catch (e: Exception) {
+                        LogCapture.log(Log.ERROR, TAG, "Error resolving Bluetooth address from device name: ${e.message}", e)
+                    }
+                }
+                
+                // Log warning if Bluetooth connection type but still no device address
+                if (connectionType == "Bluetooth" && deviceAddress.isNullOrBlank()) {
                     LogCapture.log(Log.WARN, TAG, "⚠️ WARNING: Bluetooth connection type specified but DeviceAddress is empty!")
                     LogCapture.log(Log.WARN, TAG, "   For TrimbleGNSS/SpectraPrecision drivers, you need to set DeviceAddress in config.properties")
+                    LogCapture.log(Log.WARN, TAG, "   Or go to Settings and enter the device name")
                     LogCapture.log(Log.WARN, TAG, "   Example: DeviceAddress=00:11:22:33:44:55")
                 }
                 

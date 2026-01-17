@@ -55,6 +55,11 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
         <service
             android:name=".service.TmmRelayService"
             android:foregroundServiceType="location|connectedDevice"

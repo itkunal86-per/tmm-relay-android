@@ -397,9 +397,88 @@ class TmmRelayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Handle reconnect action
+        if (intent?.action == ACTION_RECONNECT) {
+            android.util.Log.i("TmmRelayService", "Received reconnect action - reconnecting device...")
+            reconnectCatalystClient()
+        }
+        
         // START_STICKY ensures service restarts if killed by system
         // Important for Android 10-16 and Samsung One UI compatibility
         return START_STICKY
+    }
+    
+    // Reconnect Catalyst client (useful after device name/address changes)
+    private fun reconnectCatalystClient() {
+        try {
+            android.util.Log.i("TmmRelayService", "Reconnecting Catalyst client...")
+            
+            // Close existing connection
+            catalystClient?.close()
+            
+            // Wait a bit for cleanup
+            Thread.sleep(500)
+            
+            // Create new client instance
+            val deviceId = DeviceInfoUtil.deviceId(this)
+            val payloadHandler: (TelemetryPayload) -> Unit = { payload ->
+                try {
+                    lastMessageAt = Instant.now()
+
+                    if (payload.latitude != 0.0 || payload.longitude != 0.0) {
+                        lastKnownLatitude = payload.latitude
+                        lastKnownLongitude = payload.longitude
+                        lastKnownFixType = payload.fixType
+                    }
+
+                    broadcastDiagnostics(payload)
+
+                    val shouldSendPost =
+                        lastSuccessfulPostAt == null ||
+                            java.time.Duration
+                                .between(lastSuccessfulPostAt, Instant.now())
+                                .toMinutes() >= 5
+
+                    if (shouldSendPost) {
+                        android.util.Log.i("TmmRelayService", "=== Sending POST request with full payload ===")
+                        
+                        val enrichedPayload = enrichPayloadWithMobileGps(payload.copy(deviceId = deviceId))
+                        
+                        ApiClient.send(
+                            enrichedPayload,
+                            apiKey
+                        ) { timestamp, payloadInfo, success ->
+                            android.util.Log.i("TmmRelayService", "POST response: $timestamp - $payloadInfo (success=$success)")
+                            if (success) lastSuccessfulPostAt = Instant.now()
+                            updateNotificationWithPost(timestamp, payloadInfo)
+                            updateDynamicStatus()
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("TmmRelayService", "Error in payloadHandler: ${e.message}", e)
+                }
+            }
+            
+            catalystClient = CatalystClient(
+                context = this,
+                onMessage = payloadHandler,
+                onError = { error ->
+                    handleCatalystError(error)
+                }
+            )
+            
+            // Connect with new configuration
+            android.util.Log.i("TmmRelayService", "Reconnecting with new device configuration...")
+            catalystClient?.connect(tenantId, deviceId)
+            
+            // Broadcast status update
+            broadcastStatusUpdate("Reconnecting", null)
+            android.util.Log.i("TmmRelayService", "Reconnection initiated successfully")
+            
+        } catch (e: Exception) {
+            android.util.Log.e("TmmRelayService", "Error reconnecting Catalyst client: ${e.message}", e)
+            handleCatalystError(e)
+        }
     }
 
     override fun onDestroy() {
@@ -643,6 +722,8 @@ class TmmRelayService : Service() {
 
         const val ACTION_DIAGNOSTICS_UPDATE =
             "com.hirenq.tmmrelay.DIAGNOSTICS_UPDATE"
+        const val ACTION_RECONNECT =
+            "com.hirenq.tmmrelay.RECONNECT"
 
         const val EXTRA_STATUS = "status"
         const val EXTRA_POST_TIMESTAMP = "post_timestamp"
