@@ -21,6 +21,7 @@ import com.hirenq.tmmrelay.util.DeviceInfoUtil
 import com.hirenq.tmmrelay.util.LocationManagerUtil
 import com.hirenq.tmmrelay.util.TrimbleLicensingUtil
 import android.location.Location
+import trimble.jssi.android.catalystfacade.DriverType
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
@@ -298,22 +299,15 @@ class TmmRelayService : Service() {
 
             // Always use Catalyst SDK
             android.util.Log.i("TmmRelayService", "Step 3: Creating CatalystClient instance")
+            // Can be changed to DriverType.Mock for testing
+            val driverType = DriverType.Catalyst
             catalystClient = CatalystClient(
                 context = this,
                 onMessage = payloadHandler,
                 onError = { error ->
-                    android.util.Log.e("TmmRelayService", "Catalyst error: ${error.message}", error)
-                    // Broadcast error state immediately
-                    val diagnosticsIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
-                        putExtra("locationPermission", hasLocationPermission())
-                        putExtra("bluetoothPermission", hasBluetoothPermission())
-                        putExtra("isConnected", false)
-                        catalystClient?.getCurrentError()?.let { errorState ->
-                            putExtra("error", errorState)
-                        }
-                    }
-                    LocalBroadcastManager.getInstance(this).sendBroadcast(diagnosticsIntent)
-                }
+                    handleCatalystError(error)
+                },
+                driverType = driverType
             )
             android.util.Log.i("TmmRelayService", "Step 3: CatalystClient created")
 

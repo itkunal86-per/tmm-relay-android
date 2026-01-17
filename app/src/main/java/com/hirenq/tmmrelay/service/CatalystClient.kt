@@ -27,7 +27,12 @@ import kotlin.math.PI
 class CatalystClient(
     private val context: Context,
     private val onMessage: (TelemetryPayload) -> Unit,
-    private val onError: (Throwable) -> Unit = {}
+    private val onError: (Throwable) -> Unit = {},
+    private val driverType: DriverType = DriverType.Catalyst, // Default to Catalyst, can be changed to DriverType.Mock
+    // Connection configuration for TrimbleGNSS/SpectraPrecision drivers
+    private val connectionType: String? = null, // "Bluetooth" or "TcpIp"
+    private val deviceAddress: String? = null,  // Bluetooth address or IP address
+    private val devicePortNo: String? = null    // Port number for TcpIp connection
 ) {
 
     private val TAG = "CatalystClient"
@@ -292,27 +297,76 @@ class CatalystClient(
                 }
 
                 /* ---------------- Step 3: Init Driver ---------------- */
-                LogCapture.log(Log.INFO, TAG, "Initializing driver...")
-                val initRc = facade!!.initDriver(DriverType.Catalyst)
+                LogCapture.log(Log.INFO, TAG, "Initializing driver: $driverType...")
+                val initRc = facade!!.initDriver(driverType)
                 if (initRc.code != DriverReturnCode.Success) {
                     LogCapture.log(Log.ERROR, TAG, "❌ Driver init failed: ${initRc.code}")
                     currentError = "DRIVER_INIT_FAILED"
                     onError(RuntimeException("Driver init failed: ${initRc.code}"))
                     return@Thread
                 } else {
-                    LogCapture.log(Log.INFO, TAG, "✅ Driver init success")
+                    LogCapture.log(Log.INFO, TAG, "✅ Driver init success: $driverType")
                 }
 
                 /* ---------------- Step 4: Connect ---------------- */
-                LogCapture.log(Log.INFO, TAG, "Connecting to sensor...")
+                LogCapture.log(Log.INFO, TAG, "Connecting to sensor using driver: $driverType...")
                 var retCode: ReturnCode = ReturnCode(DriverReturnCode.Error)
-                val driverType = DriverType.Catalyst
                 
-                if (driverType == DriverType.Catalyst || 
-                    driverType == DriverType.EM100 || 
-                    driverType == DriverType.TDC150) {
-                    retCode = facade!!.connect()
+                // Handle different driver types matching MainModel.java pattern using when statement
+                when (driverType) {
+                    DriverType.Catalyst,
+                    DriverType.EM100,
+                    DriverType.TDC150 -> {
+                        LogCapture.log(Log.INFO, TAG, "Connecting via standard connection (Catalyst/EM100/TDC150)...")
+                        retCode = facade!!.connect()
+                    }
                     
+                    DriverType.TrimbleGNSS,
+                    DriverType.SpectraPrecision -> {
+                        // TrimbleGNSS/SpectraPrecision require connection configuration
+                        if (connectionType == null || deviceAddress == null) {
+                            LogCapture.log(Log.ERROR, TAG, "TrimbleGNSS/SpectraPrecision drivers require connection configuration (ConnectionType, DeviceAddress)")
+                            currentError = "CONNECT_FAILED"
+                            onError(RuntimeException("TrimbleGNSS/SpectraPrecision drivers require connection configuration (ConnectionType, DeviceAddress)"))
+                            return@Thread
+                        }
+                        
+                        // Handle connection based on ConnectionType (matching MainModel.java pattern)
+                        retCode = when (connectionType) {
+                            "Bluetooth" -> {
+                                LogCapture.log(Log.INFO, TAG, "Connecting via Bluetooth to address: $deviceAddress")
+                                facade!!.connectViaBluetooth(deviceAddress)
+                            }
+                            "TcpIp" -> {
+                                if (devicePortNo == null) {
+                                    LogCapture.log(Log.ERROR, TAG, "TcpIp connection requires DevicePortNo")
+                                    currentError = "CONNECT_FAILED"
+                                    onError(RuntimeException("TcpIp connection requires DevicePortNo"))
+                                    return@Thread
+                                }
+                                LogCapture.log(Log.INFO, TAG, "Connecting via WiFi to $deviceAddress:$devicePortNo")
+                                facade!!.connectViaWifi(deviceAddress, devicePortNo)
+                            }
+                            else -> {
+                                LogCapture.log(Log.ERROR, TAG, "Invalid ConnectionType: $connectionType. Must be 'Bluetooth' or 'TcpIp'")
+                                currentError = "CONNECT_FAILED"
+                                onError(RuntimeException("Invalid ConnectionType: $connectionType. Must be 'Bluetooth' or 'TcpIp'"))
+                                return@Thread
+                            }
+                        }
+                    }
+                    
+                    DriverType.Mock -> {
+                        LogCapture.log(Log.INFO, TAG, "Connecting via Mock driver...")
+                        retCode = facade!!.connectMock()
+                    }
+                    
+                    else -> {
+                        LogCapture.log(Log.ERROR, TAG, "Unsupported driver type: $driverType")
+                        currentError = "CONNECT_FAILED"
+                        onError(RuntimeException("Unsupported driver type: $driverType"))
+                        return@Thread
+                    }
                 }
                 
                 if (retCode.code != DriverReturnCode.Success) {
@@ -321,7 +375,7 @@ class CatalystClient(
                     onError(RuntimeException("Connect failed: ${retCode.code}"))
                     return@Thread
                 } else {
-                    LogCapture.log(Log.INFO, TAG, "✅ Connect success")
+                    LogCapture.log(Log.INFO, TAG, "✅ Connect success: $driverType")
                 }
 
                 /* 🔴 REQUIRED IN 2025.12.5 — ADD LISTENER IMMEDIATELY */
