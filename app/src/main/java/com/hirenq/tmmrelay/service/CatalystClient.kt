@@ -810,7 +810,7 @@ class CatalystClient(
     
    private fun waitForLicense(
     facade: CatalystFacade,
-    timeoutMs: Long = 12000,   // 🔴 increased
+    timeoutMs: Long = 1200000,   // 🔴 increased
     intervalMs: Long = 1000
 ): Boolean {
 
