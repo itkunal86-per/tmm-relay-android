@@ -68,22 +68,30 @@ class SettingsActivity : AppCompatActivity() {
         Toast.makeText(this, "Device name saved: $deviceName", Toast.LENGTH_SHORT).show()
         LogCapture.log(android.util.Log.INFO, "SettingsActivity", "Device name saved: $deviceName")
 
-        // Try to resolve address if permissions are available
+        // Try to resolve address if permissions are available (just get the address, don't connect)
+        var addressResolved = false
         if (checkBluetoothPermissions()) {
             val address = BluetoothUtil.getBluetoothAddressByName(this, deviceName)
             if (address != null) {
+                // Save the resolved address to config file so connect() can use it
+                BluetoothUtil.saveDeviceAddress(this, address)
                 Toast.makeText(this, "Found Bluetooth address: $address", Toast.LENGTH_LONG).show()
                 LogCapture.log(android.util.Log.INFO, "SettingsActivity", "Resolved address: $address for device: $deviceName")
+                addressResolved = true
             } else {
                 Toast.makeText(this, "Device not found in paired devices. Make sure to pair the device first.", Toast.LENGTH_LONG).show()
                 LogCapture.log(android.util.Log.WARN, "SettingsActivity", "Could not find device with name containing: $deviceName")
             }
         }
         
-        // Always trigger reconnection after saving device name
-        // The CatalystClient will attempt to resolve the address from the saved name during connection
-        LogCapture.log(android.util.Log.INFO, "SettingsActivity", "Triggering device reconnection...")
-        triggerReconnection()
+        // Only trigger reconnection if address was successfully resolved
+        // This will call connect() which will use the resolved address
+        if (addressResolved) {
+            LogCapture.log(android.util.Log.INFO, "SettingsActivity", "Address resolved. Triggering connect() to establish connection...")
+            triggerReconnection()
+        } else {
+            LogCapture.log(android.util.Log.INFO, "SettingsActivity", "Address not resolved. connect() will be called when device is found or manually triggered.")
+        }
     }
 
     private fun checkBluetoothPermissions(): Boolean {

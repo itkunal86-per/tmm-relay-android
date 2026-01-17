@@ -586,25 +586,31 @@ class CatalystClient(
                 
                 LogCapture.log(Log.INFO, TAG, "Connection config from file: Type=$connectionType, Address=$deviceAddress, Port=$devicePortNo")
                 
-                // If Bluetooth connection type and device address is empty, try to resolve from saved device name
+                // If Bluetooth connection type and device address is empty, try to get from saved address or resolve from saved device name
                 if (connectionType == "Bluetooth" && deviceAddress.isNullOrBlank()) {
-                    LogCapture.log(Log.INFO, TAG, "DeviceAddress is empty, attempting to resolve from saved device name...")
+                    LogCapture.log(Log.INFO, TAG, "DeviceAddress is empty, attempting to get from saved address or resolve from device name...")
                     try {
-                        val resolvedAddress = com.hirenq.tmmrelay.util.BluetoothUtil.getBluetoothAddressFromSavedName(context)
+                        // First, try to get directly saved address (from Settings save button)
+                        var resolvedAddress = com.hirenq.tmmrelay.util.BluetoothUtil.getDeviceAddress(context)
+                        if (resolvedAddress == null) {
+                            // If no saved address, try to resolve from device name
+                            resolvedAddress = com.hirenq.tmmrelay.util.BluetoothUtil.getBluetoothAddressFromSavedName(context)
+                        }
+                        
                         if (resolvedAddress != null) {
                             deviceAddress = resolvedAddress
-                            LogCapture.log(Log.INFO, TAG, "✅ Resolved Bluetooth address from device name: $deviceAddress")
+                            LogCapture.log(Log.INFO, TAG, "✅ Resolved Bluetooth address: $deviceAddress")
                             // Update config file with resolved address for future use
                             config.setProperty(CONFIG_KEY_DEVICE_ADDRESS, deviceAddress)
                             writeConfigToFile(config)
                             LogCapture.log(Log.INFO, TAG, "Updated config file with resolved address")
                         } else {
-                            LogCapture.log(Log.WARN, TAG, "⚠️ WARNING: Could not resolve Bluetooth address from device name!")
+                            LogCapture.log(Log.WARN, TAG, "⚠️ WARNING: Could not resolve Bluetooth address!")
                             LogCapture.log(Log.WARN, TAG, "   Please go to Settings and enter the device name, or set DeviceAddress in config.properties")
                             LogCapture.log(Log.WARN, TAG, "   Example: DeviceAddress=00:11:22:33:44:55")
                         }
                     } catch (e: Exception) {
-                        LogCapture.log(Log.ERROR, TAG, "Error resolving Bluetooth address from device name: ${e.message}", e)
+                        LogCapture.log(Log.ERROR, TAG, "Error resolving Bluetooth address: ${e.message}", e)
                     }
                 }
                 

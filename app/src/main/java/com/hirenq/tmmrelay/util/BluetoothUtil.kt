@@ -10,6 +10,7 @@ import android.util.Log
 object BluetoothUtil {
     private const val PREFS_NAME = "bluetooth_settings"
     private const val KEY_DEVICE_NAME = "device_name"
+    private const val KEY_DEVICE_ADDRESS = "device_address"
     private const val TAG = "BluetoothUtil"
 
     /**
@@ -27,6 +28,23 @@ object BluetoothUtil {
     fun getDeviceName(context: Context): String? {
         val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getString(KEY_DEVICE_NAME, null)
+    }
+
+    /**
+     * Save device address to preferences
+     */
+    fun saveDeviceAddress(context: Context, deviceAddress: String) {
+        val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_DEVICE_ADDRESS, deviceAddress).apply()
+        Log.i(TAG, "Saved device address: $deviceAddress")
+    }
+
+    /**
+     * Get saved device address from preferences
+     */
+    fun getDeviceAddress(context: Context): String? {
+        val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_DEVICE_ADDRESS, null)
     }
 
     /**
