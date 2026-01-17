@@ -71,6 +71,21 @@ class TmmRelayService : Service() {
 
     // -------------------- HELPER FUNCTIONS --------------------
     
+    // Handle Catalyst client errors
+    private fun handleCatalystError(error: Throwable) {
+        android.util.Log.e("TmmRelayService", "Catalyst error: ${error.message}", error)
+        // Broadcast error state immediately
+        val diagnosticsIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+            putExtra("locationPermission", hasLocationPermission())
+            putExtra("bluetoothPermission", hasBluetoothPermission())
+            putExtra("isConnected", false)
+            catalystClient?.getCurrentError()?.let { errorState ->
+                putExtra("error", errorState)
+            }
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(diagnosticsIntent)
+    }
+    
     // Enrich payload with mobile GPS data
     private fun enrichPayloadWithMobileGps(payload: TelemetryPayload): TelemetryPayload {
         val mobileBattery = DeviceInfoUtil.batteryLevel(this)
