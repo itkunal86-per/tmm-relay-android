@@ -436,7 +436,9 @@ class CatalystClient(
                if (waitForLicense(facade!!))
                   {
                     val sp = facade!!.getSensorProperties().returnedObject
-                    // Log entire SensorProperties object
+                    // Log entire SensorProperties object as string
+                    LogCapture.log(Log.INFO, TAG, "=== SensorProperties returnedObject (as String) ===")
+                    LogCapture.log(Log.INFO, TAG, "returnedObject.toString(): ${sp.toString()}")
                     LogCapture.log(Log.INFO, TAG, "=== SensorProperties Details ===")
                     LogCapture.log(Log.INFO, TAG, "Instrument Name: ${sp.instrumentName}")
                     LogCapture.log(Log.INFO, TAG, "Serial Number: ${sp.serialNumber}")
@@ -497,7 +499,9 @@ class CatalystClient(
 
         if (rc.code == DriverReturnCode.Success && rc.returnedObject != null) {
             val sp = rc.returnedObject
-            // Log entire SensorProperties object
+            // Log entire SensorProperties object as string
+            LogCapture.log(Log.INFO, TAG, "=== SensorProperties returnedObject (as String) ===")
+            LogCapture.log(Log.INFO, TAG, "returnedObject.toString(): ${sp.toString()}")
             LogCapture.log(Log.INFO, TAG, "=== SensorProperties Details ===")
             LogCapture.log(Log.INFO, TAG, "Instrument Name: ${sp.instrumentName}")
             LogCapture.log(Log.INFO, TAG, "Serial Number: ${sp.serialNumber}")
