@@ -22,26 +22,130 @@ import trimble.jssi.android.catalystfacade.TargetReferenceFrame
 import trimble.jssi.interfaces.gnss.PositionRate
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.IOException
 import java.time.Instant
+import java.util.Properties
 import kotlin.math.PI
 
 class CatalystClient(
     private val context: Context,
     private val onMessage: (TelemetryPayload) -> Unit,
     private val onError: (Throwable) -> Unit = {},
-    private val driverType: DriverType = DriverType.Catalyst, // Default to Catalyst, can be changed to DriverType.Mock
-    // Connection configuration for TrimbleGNSS/SpectraPrecision drivers
-    private val connectionType: String? = null, // "Bluetooth" or "TcpIp" - validated based on driver type
-    private val deviceAddress: String? = null,  // Bluetooth address or IP address
-    private val devicePortNo: String? = null,   // Port number for TcpIp connection
     // Device license subscription (alternative to TMM subscription)
     private val deviceLicense: String? = null   // Device license string - if provided, uses loadDeviceSubscription instead of loadSubscription
 ) {
+    
+    // Config file (matching MainModel.java getConfigFile() line 359-364)
+    private val configFile: File by lazy {
+        File(context.filesDir.absolutePath + File.separator + "config.properties")
+    }
 
+    // TAG for logging - using our class name for clarity
+    // Note: CatalystFacade.java uses "JCatalystFacade" as its internal TAG,
+    // but we use "CatalystClient" since we're in our own client class for better log filtering
     private val TAG = "CatalystClient"
     
+    // Config property keys (matching MainModel.java lines 171-175)
+    companion object {
+        private const val DriverType = "DriverType"
+        private const val ConnectionType = "ConnectionType"
+        private const val DeviceAddress = "DeviceAddress"
+        private const val DeviceName = "DeviceName"
+        private const val DevicePortNo = "DevicePortNo"
+    }
+    
+    // Read configuration from file (matching MainModel.java readConfig() lines 965-991)
+    private fun readConfig(): Properties? {
+        if (!configFile.exists()) {
+            createDefaultConfig()
+        }
+        if (!configFile.exists()) {
+            return null
+        }
+        LogCapture.log(Log.INFO, TAG, "Reading Configuration from ${configFile.absolutePath}")
+        val properties = Properties()
+        var fileInputStream: FileInputStream? = null
+        try {
+            fileInputStream = FileInputStream(configFile)
+            properties.load(fileInputStream)
+        } catch (e: IOException) {
+            LogCapture.log(Log.ERROR, TAG, "Error reading config file: ${e.message}", e)
+            return null
+        } finally {
+            try {
+                fileInputStream?.close()
+            } catch (e: IOException) {
+                LogCapture.log(Log.WARN, TAG, "Error closing config file: ${e.message}", e)
+            }
+        }
+        return properties
+    }
+    
+    // Create default configuration (matching MainModel.java createDefaultConfig() lines 993-1011)
+    private fun createDefaultConfig() {
+        LogCapture.log(Log.INFO, TAG, "Creating default configuration")
+        val properties = Properties()
+        properties.setProperty(DriverType, DriverType.TrimbleGNSS.name) // Default to TrimbleGNSS (matching demo line 996)
+        properties.setProperty(ConnectionType, "Bluetooth")
+        properties.setProperty(DeviceAddress, "")
+        properties.setProperty(DeviceName, "")
+        properties.setProperty(DevicePortNo, "")
+        writeConfigToFile(properties)
+    }
+    
+    // Write configuration to file (matching MainModel.java writeConfigToFile() lines 1092-1110)
+    private fun writeConfigToFile(properties: Properties) {
+        var fileOutputStream: FileOutputStream? = null
+        try {
+            fileOutputStream = FileOutputStream(configFile)
+            properties.store(fileOutputStream, "Configuration CatalystFacade")
+        } catch (e: IOException) {
+            LogCapture.log(Log.ERROR, TAG, "Error writing config file: ${e.message}", e)
+        } finally {
+            try {
+                fileOutputStream?.close()
+            } catch (e: IOException) {
+                LogCapture.log(Log.WARN, TAG, "Error closing config file: ${e.message}", e)
+            }
+        }
+    }
+    
+    // Read driver type from config (matching MainModel.java readDriverTypeFromConfig() lines 723-728)
+    private fun readDriverTypeFromConfig(): DriverType? {
+        val config = readConfig() ?: return null
+        return parseDriverType(config)
+    }
+    
+    // Parse driver type from Properties (matching MainModel.java parseDriverType() lines 730-742)
+    private fun parseDriverType(config: Properties): DriverType? {
+        val deviceTypeStr = config.getProperty(DriverType)
+        if (deviceTypeStr == null) {
+            return null
+        }
+        return try {
+            DriverType.valueOf(deviceTypeStr)
+        } catch (e: IllegalArgumentException) {
+            null
+        }
+    }
+    
+    // Get driver type with default (matching MainModel.java getDriverType() lines 577-585)
+    private fun getDriverType(deviceTypeStr: String?): DriverType {
+        if (deviceTypeStr == null) {
+            return DriverType.TrimbleGNSS // Default (matching demo line 582)
+        }
+        return try {
+            DriverType.valueOf(deviceTypeStr)
+        } catch (e: IllegalArgumentException) {
+            DriverType.TrimbleGNSS // Default if invalid (matching demo line 582)
+        }
+    }
+    
     // Validate connection configuration based on driver type (matching Configuration.java logic)
-    private fun validateConnectionConfig(): Boolean {
+    private fun validateConnectionConfig(driverType: DriverType, connectionType: String?, deviceAddress: String?, devicePortNo: String?): Boolean {
         // TrimbleGNSS and SpectraPrecision require connection configuration
         if (driverType == DriverType.TrimbleGNSS || driverType == DriverType.SpectraPrecision) {
             if (connectionType == null || deviceAddress == null) {
@@ -74,12 +178,6 @@ class CatalystClient(
                     return false
                 }
             }
-        } else {
-            // For other driver types (Catalyst, EM100, TDC150, Mock), connection config is not needed
-            // Log warning if connection config is provided but not needed
-            if (connectionType != null || deviceAddress != null || devicePortNo != null) {
-                LogCapture.log(Log.WARN, TAG, "Connection configuration provided for driver type $driverType, but it's not required. Ignoring connection config.")
-            }
         }
         return true
     }
@@ -107,6 +205,20 @@ class CatalystClient(
            java.time.Duration.between(lastDataReceivedAt, Instant.now()).seconds < 30
     }
     fun getCurrentError(): String? = currentError
+    
+    /**
+     * Get power source state directly from the sensor (matching CatalystFacade.java getPowerSourceState)
+     * This queries the current power state rather than waiting for an event update
+     * @return PowerSourceState or null if sensor is not connected or power info not available
+     */
+    fun getPowerSourceState(): PowerSourceState? {
+        return try {
+            facade?.getPowerSourceState()
+        } catch (e: Exception) {
+            LogCapture.log(Log.WARN, TAG, "Error getting power source state: ${e.message}", e)
+            null
+        }
+    }
     
     // Track latest values from different event types
     private var latestPosition: PositionUpdate? = null
@@ -363,8 +475,29 @@ class CatalystClient(
                     }
                 }
 
-                /* ---------------- Step 3: Init Driver ---------------- */
+                /* ---------------- Step 3: Read Config and Driver Type ---------------- */
+                // Read configuration from file (matching MainModel.java line 596)
+                val config = readConfig()
+                if (config == null) {
+                    LogCapture.log(Log.ERROR, TAG, "❌ Unable to read configuration")
+                    currentError = "CONFIG_ERROR"
+                    onError(RuntimeException("Unable to read configuration"))
+                    return@Thread
+                }
+                
+                // Read driver type from config (matching MainModel.java line 598)
+                // In demo: DriverType driverType = readDriverTypeFromConfig();
+                // We get it from config directly since we already have it
+                val deviceTypeStr = config.getProperty(DriverType)
+                val driverType = getDriverType(deviceTypeStr) // Defaults to TrimbleGNSS if null or invalid (matching demo line 582)
+                
+                LogCapture.log(Log.INFO, TAG, "Driver type from config: $driverType (config value: ${deviceTypeStr ?: "null"})")
+
+                /* ---------------- Step 4: Init Driver ---------------- */
+                // initDriver internally calls releaseDriver() if a driver already exists
+                // (matching CatalystFacade.java lines 393-394)
                 LogCapture.log(Log.INFO, TAG, "Initializing driver: $driverType...")
+                LogCapture.log(Log.DEBUG, TAG, "Note: initDriver will automatically release existing driver if present")
                 val initRc = facade!!.initDriver(driverType)
                 if (initRc.code != DriverReturnCode.Success) {
                     LogCapture.log(Log.ERROR, TAG, "❌ Driver init failed: ${initRc.code}")
@@ -373,13 +506,44 @@ class CatalystClient(
                     return@Thread
                 } else {
                     LogCapture.log(Log.INFO, TAG, "✅ Driver init success: $driverType")
+                    // Log driver mapping info (matching CatalystFacade.java deviceTypeMap lines 412-423)
+                    // and getDriver() switch statement (lines 428-446)
+                    when (driverType) {
+                        DriverType.TrimbleGNSS, DriverType.EM100 -> {
+                            LogCapture.log(Log.INFO, TAG, "Driver loaded: Trimble.Ssi.Driver.CarpoBased.Driver.RSeries")
+                            LogCapture.log(Log.INFO, TAG, "License name: TrimbleRSeries")
+                        }
+                        DriverType.Catalyst -> {
+                            LogCapture.log(Log.INFO, TAG, "Driver registered: CatalystDriver (via registerDriver)")
+                            LogCapture.log(Log.INFO, TAG, "License name: TrimbleCatalyst")
+                        }
+                        DriverType.Mock -> {
+                            LogCapture.log(Log.INFO, TAG, "Driver loaded: Trimble.Ssi.Driver.Mock.GNSS")
+                            LogCapture.log(Log.INFO, TAG, "License name: TrimbleMockGNSS")
+                        }
+                        DriverType.SpectraPrecision, DriverType.TDC150 -> {
+                            LogCapture.log(Log.INFO, TAG, "Driver loaded: Trimble.Ssi.Driver.CarpoBased.Driver.SP80")
+                            LogCapture.log(Log.INFO, TAG, "License name: SpectraPrecisionGNSS")
+                        }
+                        else -> {
+                            LogCapture.log(Log.WARN, TAG, "Unknown driver type: $driverType")
+                        }
+                    }
                 }
 
-                /* ---------------- Step 4: Connect ---------------- */
+                /* ---------------- Step 5: Read Connection Config from Config File ---------------- */
+                // Read connection configuration from config file (matching MainModel.java line 596)
+                val connectionType = config.getProperty(ConnectionType)
+                val deviceAddress = config.getProperty(DeviceAddress)
+                val devicePortNo = config.getProperty(DevicePortNo)
+                
+                LogCapture.log(Log.INFO, TAG, "Connection config from file: Type=$connectionType, Address=$deviceAddress, Port=$devicePortNo")
+                
+                /* ---------------- Step 6: Connect ---------------- */
                 LogCapture.log(Log.INFO, TAG, "Connecting to sensor using driver: $driverType...")
                 var retCode: ReturnCode = ReturnCode(DriverReturnCode.Error)
                 
-                // Handle different driver types matching MainModel.java pattern using when statement
+                // Handle different driver types matching MainModel.java pattern using when statement (lines 603-627)
                 when (driverType) {
                     DriverType.Catalyst,
                     DriverType.EM100,
@@ -393,13 +557,13 @@ class CatalystClient(
                         // Validate connection configuration (matching Configuration.java updateConnectionTypes logic)
                         // - TrimbleGNSS: supports both Bluetooth and TcpIp
                         // - SpectraPrecision: supports only Bluetooth (not TcpIp)
-                        if (!validateConnectionConfig()) {
+                        if (!validateConnectionConfig(driverType, connectionType, deviceAddress, devicePortNo)) {
                             currentError = "CONNECT_FAILED"
                             onError(RuntimeException("Invalid connection configuration for driver type $driverType"))
                             return@Thread
                         }
                         
-                        // Handle connection based on ConnectionType (matching MainModel.java and Configuration.java pattern)
+                        // Handle connection based on ConnectionType (matching MainModel.java lines 615-623)
                         // At this point, validation ensures:
                         // - TrimbleGNSS: Bluetooth or TcpIp (both valid)
                         // - SpectraPrecision: Bluetooth only (TcpIp rejected by validateConnectionConfig)
@@ -828,41 +992,59 @@ class CatalystClient(
 
     fun close() {
         try {
-            Log.i(TAG, "Closing Catalyst client")
+            LogCapture.log(Log.INFO, TAG, "=== Closing Catalyst client ===")
             
-            if (sdkConnected && facade != null) {
-                try {
-                    // Only end survey if one was started
-                  //  facade?.endSurvey()
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error ending survey (may not be started)", e)
-                }
-                
-                try {
-                   // facade?.disconnectFromSensor()
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error disconnecting from sensor", e)
-                }
+            // Proper cleanup following CatalystFacade.java pattern (lines 362-384)
+            // Order: Remove listener -> Disconnect -> Release driver
+            
+            try {
+                // Step 1: Remove event listener first
+                facade?.removeCatalystEventListener(eventListener)
+                LogCapture.log(Log.INFO, TAG, "✅ Event listener removed")
+            } catch (e: Exception) {
+                LogCapture.log(Log.WARN, TAG, "⚠ Error removing event listener: ${e.message}", e)
             }
             
+            try {
+                // Step 2: Disconnect from sensor if connected
+                // releaseDriver() internally calls disconnectFromSensor() if connected,
+                // but we can also call it explicitly here for clarity
+                if (sdkConnected) {
+                    facade?.disconnectFromSensor()
+                    LogCapture.log(Log.INFO, TAG, "✅ Disconnected from sensor")
+                }
+            } catch (e: Exception) {
+                LogCapture.log(Log.WARN, TAG, "⚠ Error disconnecting from sensor: ${e.message}", e)
+            }
+            
+            try {
+                // Step 3: Release driver (matching CatalystFacade.java releaseDriver() at line 362)
+                // This internally disconnects if connected and sets driver to null
+                val releaseRc = facade?.releaseDriver()
+                if (releaseRc != null) {
+                    if (releaseRc.code == DriverReturnCode.Success) {
+                        LogCapture.log(Log.INFO, TAG, "✅ Driver released successfully")
+                    } else if (releaseRc.code == DriverReturnCode.Error) {
+                        // Error is expected if driver is already null
+                        LogCapture.log(Log.DEBUG, TAG, "Driver release returned Error (driver may already be null)")
+                    } else {
+                        LogCapture.log(Log.WARN, TAG, "⚠ Driver release returned: ${releaseRc.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                LogCapture.log(Log.WARN, TAG, "⚠ Error releasing driver: ${e.message}", e)
+            }
+            
+            // Clear state flags
             isConnected = false
             sdkConnected = false
             lastDataReceivedAt = null
             currentError = null
             
-            try {
-              //  facade?.removeCatalystEventListener(eventListener)
-            } catch (e: Exception) {
-                Log.w(TAG, "Error removing event listener", e)
-            }
-            
-            try {
-              //  facade?.releaseDriver()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error releasing driver", e)
-            }
-            
+            // Clear facade reference
             facade = null
+            
+            LogCapture.log(Log.INFO, TAG, "=== Catalyst client closed ===")
             
             // Clear cached data
             latestPosition = null

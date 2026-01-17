@@ -313,16 +313,14 @@ class TmmRelayService : Service() {
         }
 
             // Always use Catalyst SDK
+            // Driver type will be read from config file (matching demo MainModel.java pattern)
             android.util.Log.i("TmmRelayService", "Step 3: Creating CatalystClient instance")
-            // Can be changed to DriverType.Mock for testing
-            val driverType = DriverType.Catalyst
             catalystClient = CatalystClient(
                 context = this,
                 onMessage = payloadHandler,
                 onError = { error ->
                     handleCatalystError(error)
-                },
-                driverType = driverType
+                }
             )
             android.util.Log.i("TmmRelayService", "Step 3: CatalystClient created")
 
