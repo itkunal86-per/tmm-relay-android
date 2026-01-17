@@ -1,7 +1,10 @@
 package com.hirenq.tmmrelay.service
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.hirenq.tmmrelay.model.TelemetryPayload
 import com.hirenq.tmmrelay.util.DeviceInfoUtil
 import com.hirenq.tmmrelay.util.LogCapture
@@ -181,6 +184,26 @@ class CatalystClient(
         }
         return true
     }
+    
+    // Check if Bluetooth permissions are granted (required for Bluetooth-enabled drivers)
+    private fun hasBluetoothPermissions(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12+ requires BLUETOOTH_CONNECT and BLUETOOTH_SCAN
+            val connectGranted = ContextCompat.checkSelfPermission(
+                context, 
+                android.Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+            val scanGranted = ContextCompat.checkSelfPermission(
+                context, 
+                android.Manifest.permission.BLUETOOTH_SCAN
+            ) == PackageManager.PERMISSION_GRANTED
+            connectGranted && scanGranted
+        } else {
+            // Android 11 and below - Bluetooth permissions are granted at install time
+            true
+        }
+    }
+    
     private var facade: CatalystFacade? = null
     private var tenantId: String = ""
     private var deviceId: String = ""
@@ -498,11 +521,33 @@ class CatalystClient(
                 // (matching CatalystFacade.java lines 393-394)
                 LogCapture.log(Log.INFO, TAG, "Initializing driver: $driverType...")
                 LogCapture.log(Log.DEBUG, TAG, "Note: initDriver will automatically release existing driver if present")
+                
+                // Check Bluetooth permissions for Bluetooth-enabled drivers BEFORE init
+                val needsBluetooth = driverType == trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS || 
+                                    driverType == trimble.jssi.android.catalystfacade.DriverType.SpectraPrecision ||
+                                    driverType == trimble.jssi.android.catalystfacade.DriverType.EM100
+                if (needsBluetooth && !hasBluetoothPermissions()) {
+                    val errorMsg = "Bluetooth permissions required for driver: $driverType. Please grant BLUETOOTH_CONNECT and BLUETOOTH_SCAN permissions."
+                    LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
+                    currentError = "DRIVER_INIT_FAILED"
+                    onError(RuntimeException(errorMsg))
+                    return@Thread
+                }
+                
                 val initRc = facade!!.initDriver(driverType)
                 if (initRc.code != DriverReturnCode.Success) {
-                    LogCapture.log(Log.ERROR, TAG, "❌ Driver init failed: ${initRc.code}")
+                    val errorMsg = "Driver init failed: ${initRc.code} for driver type: $driverType"
+                    LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
+                    LogCapture.log(Log.ERROR, TAG, "Driver type: $driverType")
+                    LogCapture.log(Log.ERROR, TAG, "Return code: ${initRc.code}")
+                    if (needsBluetooth) {
+                        LogCapture.log(Log.ERROR, TAG, "Note: This driver requires Bluetooth. Ensure:")
+                        LogCapture.log(Log.ERROR, TAG, "  1. Bluetooth is enabled on device")
+                        LogCapture.log(Log.ERROR, TAG, "  2. BLUETOOTH_CONNECT and BLUETOOTH_SCAN permissions are granted")
+                        LogCapture.log(Log.ERROR, TAG, "  3. DeviceAddress is configured in config.properties for TrimbleGNSS/SpectraPrecision")
+                    }
                     currentError = "DRIVER_INIT_FAILED"
-                    onError(RuntimeException("Driver init failed: ${initRc.code}"))
+                    onError(RuntimeException(errorMsg))
                     return@Thread
                 } else {
                     LogCapture.log(Log.INFO, TAG, "✅ Driver init success: $driverType")
@@ -541,6 +586,13 @@ class CatalystClient(
                 
                 LogCapture.log(Log.INFO, TAG, "Connection config from file: Type=$connectionType, Address=$deviceAddress, Port=$devicePortNo")
                 
+                // Log warning if Bluetooth connection type but no device address
+                if (connectionType == "Bluetooth" && (deviceAddress.isNullOrBlank())) {
+                    LogCapture.log(Log.WARN, TAG, "⚠️ WARNING: Bluetooth connection type specified but DeviceAddress is empty!")
+                    LogCapture.log(Log.WARN, TAG, "   For TrimbleGNSS/SpectraPrecision drivers, you need to set DeviceAddress in config.properties")
+                    LogCapture.log(Log.WARN, TAG, "   Example: DeviceAddress=00:11:22:33:44:55")
+                }
+                
                 /* ---------------- Step 6: Connect ---------------- */
                 LogCapture.log(Log.INFO, TAG, "Connecting to sensor using driver: $driverType...")
                 var retCode: ReturnCode = ReturnCode(DriverReturnCode.Error)
@@ -571,8 +623,26 @@ class CatalystClient(
                         // - SpectraPrecision: Bluetooth only (TcpIp rejected by validateConnectionConfig)
                         retCode = when (connectionType) {
                             "Bluetooth" -> {
+                                // Double-check Bluetooth permissions before connecting
+                                if (!hasBluetoothPermissions()) {
+                                    val errorMsg = "Bluetooth permissions not granted. Please grant BLUETOOTH_CONNECT and BLUETOOTH_SCAN permissions."
+                                    LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
+                                    currentError = "CONNECT_FAILED"
+                                    onError(RuntimeException(errorMsg))
+                                    return@Thread
+                                }
+                                
+                                if (deviceAddress.isNullOrBlank()) {
+                                    val errorMsg = "Bluetooth connection requires DeviceAddress in config.properties. Example: DeviceAddress=00:11:22:33:44:55"
+                                    LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
+                                    currentError = "CONNECT_FAILED"
+                                    onError(RuntimeException(errorMsg))
+                                    return@Thread
+                                }
+                                
                                 LogCapture.log(Log.INFO, TAG, "Connecting via Bluetooth to address: $deviceAddress")
-                                facade!!.connectViaBluetooth(deviceAddress ?: "")
+                                LogCapture.log(Log.DEBUG, TAG, "Driver type: $driverType, Bluetooth address: $deviceAddress")
+                                facade!!.connectViaBluetooth(deviceAddress)
                             }
                             "TcpIp" -> {
                                 // TcpIp is only valid for TrimbleGNSS (validated in validateConnectionConfig)
@@ -603,12 +673,31 @@ class CatalystClient(
                 }
                 
                 if (retCode.code != DriverReturnCode.Success) {
-                    LogCapture.log(Log.ERROR, TAG, "❌ Connect failed: ${retCode.code}")
+                    val errorMsg = "Connect failed: ${retCode.code} for driver: $driverType"
+                    LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
+                    LogCapture.log(Log.ERROR, TAG, "Driver type: $driverType")
+                    LogCapture.log(Log.ERROR, TAG, "Connection type: $connectionType")
+                    LogCapture.log(Log.ERROR, TAG, "Device address: $deviceAddress")
+                    LogCapture.log(Log.ERROR, TAG, "Return code: ${retCode.code}")
+                    
+                    // Provide specific troubleshooting for Bluetooth connections
+                    if (connectionType == "Bluetooth") {
+                        LogCapture.log(Log.ERROR, TAG, "Bluetooth connection troubleshooting:")
+                        LogCapture.log(Log.ERROR, TAG, "  1. Ensure Bluetooth is enabled on device")
+                        LogCapture.log(Log.ERROR, TAG, "  2. Verify BLUETOOTH_CONNECT and BLUETOOTH_SCAN permissions are granted")
+                        LogCapture.log(Log.ERROR, TAG, "  3. Check DeviceAddress is correct MAC address format (e.g., 00:11:22:33:44:55)")
+                        LogCapture.log(Log.ERROR, TAG, "  4. Ensure DA2 receiver is powered on and in pairing mode")
+                        LogCapture.log(Log.ERROR, TAG, "  5. Try pairing the device manually in Android Bluetooth settings first")
+                    }
+                    
                     currentError = "CONNECT_FAILED"
-                    onError(RuntimeException("Connect failed: ${retCode.code}"))
+                    onError(RuntimeException(errorMsg))
                     return@Thread
                 } else {
                     LogCapture.log(Log.INFO, TAG, "✅ Connect success: $driverType")
+                    if (connectionType == "Bluetooth") {
+                        LogCapture.log(Log.INFO, TAG, "   Connected to Bluetooth device: $deviceAddress")
+                    }
                 }
 
                 /* 🔴 REQUIRED IN 2025.12.5 — ADD LISTENER IMMEDIATELY */
