@@ -155,6 +155,27 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun hasAllCriticalPermissions(): Boolean {
+        // Check basic permissions (matching Java demo)
+        val bluetoothAdmin =
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.BLUETOOTH_ADMIN
+            ) == PackageManager.PERMISSION_GRANTED
+
+        val bluetooth =
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.BLUETOOTH
+            ) == PackageManager.PERMISSION_GRANTED
+
+        val internet =
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.INTERNET
+            ) == PackageManager.PERMISSION_GRANTED
+
+        val networkState =
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_NETWORK_STATE
+            ) == PackageManager.PERMISSION_GRANTED
+
         val location =
             ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_FINE_LOCATION
@@ -165,7 +186,12 @@ class MainActivity : ComponentActivity() {
                 this, Manifest.permission.ACCESS_COARSE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
 
+        val readPhoneState =
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.READ_PHONE_STATE
+            ) == PackageManager.PERMISSION_GRANTED
 
+        // Check Android 12+ Bluetooth permissions
         val bluetoothConnect =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
                 ContextCompat.checkSelfPermission(
@@ -180,6 +206,15 @@ class MainActivity : ComponentActivity() {
                 ) == PackageManager.PERMISSION_GRANTED
             else true
 
+        // Check WRITE_EXTERNAL_STORAGE for Android < S
+        val writeStorage =
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
+                ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED
+            else true
+
+        // Check notification permission for Android 13+
         val notifications =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
                 ContextCompat.checkSelfPermission(
@@ -187,12 +222,9 @@ class MainActivity : ComponentActivity() {
                 ) == PackageManager.PERMISSION_GRANTED
             else true
 
-        val readPhoneState =
-            ContextCompat.checkSelfPermission(
-                this, Manifest.permission.READ_PHONE_STATE
-            ) == PackageManager.PERMISSION_GRANTED
-
-        return location &&  coarseLocation && bluetoothConnect && bluetoothScan && notifications && readPhoneState
+        return bluetoothAdmin && bluetooth && internet && networkState && 
+               location && coarseLocation && readPhoneState && 
+               bluetoothConnect && bluetoothScan && writeStorage && notifications
     }
     
     private fun shouldRedirectToSettings(): Boolean {
@@ -206,10 +238,20 @@ class MainActivity : ComponentActivity() {
                 this, Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
         } else false
-        
+
         val bluetoothScanDenied = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ContextCompat.checkSelfPermission(
                 this, Manifest.permission.BLUETOOTH_SCAN
+            ) != PackageManager.PERMISSION_GRANTED
+        } else false
+
+        val readPhoneStateDenied = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.READ_PHONE_STATE
+        ) != PackageManager.PERMISSION_GRANTED
+
+        val writeStorageDenied = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.WRITE_EXTERNAL_STORAGE
             ) != PackageManager.PERMISSION_GRANTED
         } else false
         
@@ -226,15 +268,25 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 !shouldShowRequestPermissionRationale(Manifest.permission.BLUETOOTH_SCAN)
             } else false
-        
-        val readPhoneStateDenied = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.READ_PHONE_STATE
-        ) != PackageManager.PERMISSION_GRANTED
 
         val readPhoneStatePermanentlyDenied = readPhoneStateDenied &&
             !shouldShowRequestPermissionRationale(Manifest.permission.READ_PHONE_STATE)
+
+        val writeStoragePermanentlyDenied = writeStorageDenied &&
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                !shouldShowRequestPermissionRationale(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            } else false
         
-        return locationPermanentlyDenied || bluetoothConnectPermanentlyDenied || bluetoothScanPermanentlyDenied || readPhoneStatePermanentlyDenied
+        val coarseLocationDenied = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) != PackageManager.PERMISSION_GRANTED
+
+        val coarseLocationPermanentlyDenied = coarseLocationDenied &&
+            !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_COARSE_LOCATION)
+        
+        return locationPermanentlyDenied || coarseLocationPermanentlyDenied ||
+               bluetoothConnectPermanentlyDenied || bluetoothScanPermanentlyDenied || 
+               readPhoneStatePermanentlyDenied || writeStoragePermanentlyDenied
     }
     
     private fun showPermissionSettingsDialog() {
@@ -537,22 +589,28 @@ class MainActivity : ComponentActivity() {
     private fun ensurePermissions() {
         val required = mutableListOf<String>()
         
-        // Always request location permission
+        // Basic permissions (Android M+ / API 23+) - matching Java demo
+        required.add(Manifest.permission.BLUETOOTH_ADMIN)
+        required.add(Manifest.permission.BLUETOOTH)
+        required.add(Manifest.permission.INTERNET)
+        required.add(Manifest.permission.ACCESS_NETWORK_STATE)
         required.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        required.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        required.add(Manifest.permission.READ_PHONE_STATE)
 
-        // Request Bluetooth permissions for Android 12+
+        // Request Bluetooth permissions for Android 12+ (API 31+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             required.add(Manifest.permission.BLUETOOTH_CONNECT)
             required.add(Manifest.permission.BLUETOOTH_SCAN)
+        } else {
+            // For Android < S (API < 31), add WRITE_EXTERNAL_STORAGE like Java demo
+            required.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
 
-        // Request notification permission for Android 13+
+        // Request notification permission for Android 13+ (API 33+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             required.add(Manifest.permission.POST_NOTIFICATIONS)
         }
-
-        // Request READ_PHONE_STATE (required by SDK)
-        required.add(Manifest.permission.READ_PHONE_STATE)
 
         val missing = required.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
