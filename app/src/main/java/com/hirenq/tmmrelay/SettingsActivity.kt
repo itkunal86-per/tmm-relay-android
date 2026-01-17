@@ -7,14 +7,14 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.hirenq.tmmrelay.databinding.ActivitySettingsBinding
 import com.hirenq.tmmrelay.util.BluetoothUtil
 import com.hirenq.tmmrelay.util.LogCapture
 
-class SettingsActivity : ComponentActivity() {
+class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
     private val bluetoothPermissionLauncher =
