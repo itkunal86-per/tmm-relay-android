@@ -17,6 +17,7 @@ import trimble.jssi.android.catalystfacade.SatelliteUpdate
 import trimble.jssi.android.catalystfacade.SensorProperties
 import trimble.jssi.android.catalystfacade.SensorStateEvent
 import trimble.jssi.android.catalystfacade.ImuStateEvent
+import trimble.jssi.android.catalystfacade.SubscriptionDetails
 import trimble.jssi.android.catalystfacade.TargetReferenceFrame
 import trimble.jssi.interfaces.gnss.PositionRate
 import org.json.JSONArray
@@ -32,7 +33,9 @@ class CatalystClient(
     // Connection configuration for TrimbleGNSS/SpectraPrecision drivers
     private val connectionType: String? = null, // "Bluetooth" or "TcpIp"
     private val deviceAddress: String? = null,  // Bluetooth address or IP address
-    private val devicePortNo: String? = null    // Port number for TcpIp connection
+    private val devicePortNo: String? = null,   // Port number for TcpIp connection
+    // Device license subscription (alternative to TMM subscription)
+    private val deviceLicense: String? = null   // Device license string - if provided, uses loadDeviceSubscription instead of loadSubscription
 ) {
 
     private val TAG = "CatalystClient"
@@ -285,15 +288,35 @@ class CatalystClient(
                 LogCapture.log(Log.INFO, TAG, "✅ Facade created")
 
                 /* ---------------- Step 2: Load Subscription ---------------- */
-                LogCapture.log(Log.INFO, TAG, "Loading subscription...")
-                val loadSubRc = facade!!.loadSubscription()
-                if (loadSubRc.code != DriverReturnCode.Success) {
-                    LogCapture.log(Log.ERROR, TAG, "❌ Load subscription failed: ${loadSubRc.code}")
-                    currentError = "NO_SUBSCRIPTION"
-                    onError(RuntimeException("Load subscription failed: ${loadSubRc.code}"))
-                    return@Thread
+                // Support both TMM subscription and device license subscription
+                if (deviceLicense != null && deviceLicense.isNotEmpty()) {
+                    // Use device license subscription (V2 licensing)
+                    LogCapture.log(Log.INFO, TAG, "Loading device license subscription...")
+                    val loadSubResult = facade!!.loadDeviceSubscription(deviceLicense)
+                    if (loadSubResult.code != DriverReturnCode.Success) {
+                        LogCapture.log(Log.ERROR, TAG, "❌ Load device subscription failed: ${loadSubResult.code}")
+                        currentError = "NO_SUBSCRIPTION"
+                        onError(RuntimeException("Load device subscription failed: ${loadSubResult.code}"))
+                        return@Thread
+                    } else {
+                        val subscriptionDetails = loadSubResult.returnedObject
+                        LogCapture.log(Log.INFO, TAG, "✅ Load device subscription success")
+                        LogCapture.log(Log.INFO, TAG, "Subscription: ${subscriptionDetails.subscriptionName}")
+                        LogCapture.log(Log.INFO, TAG, "Issue Date: ${subscriptionDetails.issueDate}")
+                        LogCapture.log(Log.INFO, TAG, "Expiry Date: ${subscriptionDetails.expiryDate}")
+                    }
                 } else {
-                    LogCapture.log(Log.INFO, TAG, "✅ Load subscription success")
+                    // Use TMM subscription (default)
+                    LogCapture.log(Log.INFO, TAG, "Loading subscription from TMM...")
+                    val loadSubRc = facade!!.loadSubscription()
+                    if (loadSubRc.code != DriverReturnCode.Success) {
+                        LogCapture.log(Log.ERROR, TAG, "❌ Load subscription failed: ${loadSubRc.code}")
+                        currentError = "NO_SUBSCRIPTION"
+                        onError(RuntimeException("Load subscription failed: ${loadSubRc.code}"))
+                        return@Thread
+                    } else {
+                        LogCapture.log(Log.INFO, TAG, "✅ Load subscription success")
+                    }
                 }
 
                 /* ---------------- Step 3: Init Driver ---------------- */
@@ -408,9 +431,18 @@ class CatalystClient(
                //     }
                // }
 
+             
+
                if (waitForLicense(facade!!))
                   {
                     val sp = facade!!.getSensorProperties().returnedObject
+                    // Log entire SensorProperties object
+                    LogCapture.log(Log.INFO, TAG, "=== SensorProperties Details ===")
+                    LogCapture.log(Log.INFO, TAG, "Instrument Name: ${sp.instrumentName}")
+                    LogCapture.log(Log.INFO, TAG, "Serial Number: ${sp.serialNumber}")
+                    LogCapture.log(Log.INFO, TAG, "Firmware: ${sp.firmware}")
+                    LogCapture.log(Log.INFO, TAG, "Licensed: ${sp.isLicensed()}")
+                    LogCapture.log(Log.INFO, TAG, "================================")
                     LogCapture.log(Log.INFO, TAG, "✅ Licensed: ${sp.instrumentName}:${sp.serialNumber}")
                   }
              else {
@@ -465,6 +497,13 @@ class CatalystClient(
 
         if (rc.code == DriverReturnCode.Success && rc.returnedObject != null) {
             val sp = rc.returnedObject
+            // Log entire SensorProperties object
+            LogCapture.log(Log.INFO, TAG, "=== SensorProperties Details ===")
+            LogCapture.log(Log.INFO, TAG, "Instrument Name: ${sp.instrumentName}")
+            LogCapture.log(Log.INFO, TAG, "Serial Number: ${sp.serialNumber}")
+            LogCapture.log(Log.INFO, TAG, "Firmware: ${sp.firmware}")
+            LogCapture.log(Log.INFO, TAG, "Licensed: ${sp.isLicensed()}")
+            LogCapture.log(Log.INFO, TAG, "================================")
             val licensed = sp.isLicensed()
 
             LogCapture.log(
