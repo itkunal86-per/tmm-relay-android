@@ -245,6 +245,26 @@ class CatalystClient(
         }
     }
     
+    /**
+     * Get sensor properties directly from the facade
+     * This queries the current sensor properties (matching CatalystFacade.java getSensorProperties)
+     * @return SensorProperties or null if sensor is not connected or properties not available
+     */
+    fun getSensorProperties(): SensorProperties? {
+        return try {
+            val sensorPropsRc = facade?.getSensorProperties()
+            if (sensorPropsRc?.code == DriverReturnCode.Success && sensorPropsRc.returnedObject != null) {
+                sensorPropsRc.returnedObject
+            } else {
+                LogCapture.log(Log.WARN, TAG, "Get sensor properties failed: ${sensorPropsRc?.code}")
+                null
+            }
+        } catch (e: Exception) {
+            LogCapture.log(Log.WARN, TAG, "Error getting sensor properties: ${e.message}", e)
+            null
+        }
+    }
+    
     // Track latest values from different event types
     private var latestPosition: PositionUpdate? = null
     private var latestSatellites: SatelliteUpdate? = null
@@ -601,15 +621,7 @@ class CatalystClient(
                 //config.getProperty(CONFIG_KEY_DEVICE_ADDRESS)
                 val devicePortNo = config.getProperty(CONFIG_KEY_DEVICE_PORT_NO)
                 
-                LogCapture.log(Log.INFO, TAG, "Connection config from file: Type=$connectionType, Address=$deviceAddress, Port=$devicePortNo")
-                
-                // Log warning if Bluetooth connection type but no device address
-                if (connectionType == "Bluetooth" && (deviceAddress.isNullOrBlank())) {
-                    LogCapture.log(Log.WARN, TAG, "⚠️ WARNING: Bluetooth connection type specified but DeviceAddress is empty!")
-                    LogCapture.log(Log.WARN, TAG, "   For TrimbleGNSS/SpectraPrecision drivers, you need to set DeviceAddress in config.properties")
-                    LogCapture.log(Log.WARN, TAG, "   Example: DeviceAddress=00:11:22:33:44:55")
-                }
-                
+           
                 /* ---------------- Step 6: Connect ---------------- */
                 LogCapture.log(Log.INFO, TAG, "Connecting to sensor using driver: $driverType...")
                 var retCode: ReturnCode = ReturnCode(DriverReturnCode.Error)
@@ -742,59 +754,6 @@ class CatalystClient(
         }.start()
     }
     
-   private fun waitForLicense(
-    facade: CatalystFacade,
-    timeoutMs: Long = 12000,   // 🔴 increased
-    intervalMs: Long = 1000
-): Boolean {
-
-    // Give SDK a short head start after connect + listener attach
-    Thread.sleep(1000)
-
-    val start = System.currentTimeMillis()
-    var attempt = 0
-
-    while (System.currentTimeMillis() - start < timeoutMs) {
-        attempt++
-
-        val rc = facade.getSensorProperties()
-
-        if (rc.code == DriverReturnCode.Success && rc.returnedObject != null) {
-            val sp = rc.returnedObject
-            // Log entire SensorProperties object as string
-            LogCapture.log(Log.INFO, TAG, "=== SensorProperties returnedObject (as String) ===")
-            LogCapture.log(Log.INFO, TAG, "returnedObject.toString(): ${sp.toString()}")
-            LogCapture.log(Log.INFO, TAG, "=== SensorProperties Details ===")
-            LogCapture.log(Log.INFO, TAG, "Instrument Name: ${sp.instrumentName}")
-            LogCapture.log(Log.INFO, TAG, "Serial Number: ${sp.serialNumber}")
-            LogCapture.log(Log.INFO, TAG, "Firmware: ${sp.firmware}")
-            LogCapture.log(Log.INFO, TAG, "Licensed: ${sp.isLicensed()}")
-            LogCapture.log(Log.INFO, TAG, "================================")
-            val licensed = sp.isLicensed()
-
-            LogCapture.log(
-                Log.INFO,
-                TAG,
-                "License check #$attempt → licensed=$licensed, serial=${sp.serialNumber}"
-            )
-
-            if (licensed) {
-                return true
-            }
-        } else {
-            LogCapture.log(
-                Log.WARN,
-                TAG,
-                "License check #$attempt → getSensorProperties failed: ${rc.code}"
-            )
-        }
-
-        Thread.sleep(intervalMs)
-    }
-
-    return false
-}
-
     
     fun createAndSendTelemetry() {
         val position = latestPosition ?: return

@@ -148,6 +148,14 @@ class MainActivity : ComponentActivity() {
 
             val isConnected = intent.getBooleanExtra("isConnected", false)
             val error = intent.getStringExtra("error")
+            
+            // Get GNSS coordinates
+            val latitude = if (intent.hasExtra("latitude")) {
+                intent.getDoubleExtra("latitude", 0.0)
+            } else 0.0
+            val longitude = if (intent.hasExtra("longitude")) {
+                intent.getDoubleExtra("longitude", 0.0)
+            } else 0.0
 
             updateDiagnosticsUI(
                 fixType,
@@ -157,7 +165,9 @@ class MainActivity : ComponentActivity() {
                 receiverHealth,
                 receiverBattery,
                 isConnected,
-                error
+                error,
+                latitude,
+                longitude
             )
         }
     }
@@ -505,7 +515,9 @@ class MainActivity : ComponentActivity() {
         receiverHealth: String,
         receiverBattery: Int?,
         isConnected: Boolean,
-        error: String?
+        error: String?,
+        latitude: Double = 0.0,
+        longitude: Double = 0.0
     ) {
         val locationGranted =
             ContextCompat.checkSelfPermission(
@@ -539,7 +551,17 @@ class MainActivity : ComponentActivity() {
             append("Satellites: $satellites\n")
             append("Accuracy: H ${hAcc.takeIf { it > 0 } ?: "N/A"} m, ")
             append("V ${vAcc.takeIf { it > 0 } ?: "N/A"} m\n")
-            append("Health: $receiverHealth")
+            append("Health: $receiverHealth\n\n")
+            
+            // Display GNSS coordinates
+            if (latitude != 0.0 || longitude != 0.0) {
+                append("GNSS Position:\n")
+                append("Lat: ${String.format("%.8f", latitude)}\n")
+                append("Lng: ${String.format("%.8f", longitude)}")
+            } else {
+                append("GNSS Position:\n")
+                append("Waiting for fix...")
+            }
         }
 
         binding.tvDiagnostics.text = text
@@ -650,6 +672,10 @@ class MainActivity : ComponentActivity() {
             val message = "✅ Trimble DA2 receiver is connected and available."
             LogCapture.log(android.util.Log.INFO, "MainActivity", message)
             showSuccessAlert("DA2 Receiver Connected", message)
+            
+            // Sensor properties will be logged automatically by TmmRelayService
+            // when connection is established (handled in broadcastDiagnostics)
+            
             previousReceiverConnected = true
         } else if (!receiverConnected) {
             previousReceiverConnected = false
