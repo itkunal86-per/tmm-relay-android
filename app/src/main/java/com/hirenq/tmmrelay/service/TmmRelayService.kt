@@ -323,7 +323,7 @@ class TmmRelayService : Service() {
                 (payload.longitude != null && payload.longitude != 0.0)) {
                 lastKnownLatitude = payload.latitude ?: 0.0
                 lastKnownLongitude = payload.longitude ?: 0.0
-                lastKnownFixType = payload.fixType
+                lastKnownFixType = payload.fixType ?: "UNKNOWN"
             }
 
             broadcastDiagnostics(payload)
@@ -452,8 +452,6 @@ class TmmRelayService : Service() {
             userId = null, // DA2 user data
             userName = null, // DA2 user data
             userEmail = null, // DA2 user data
-            receiverBattery = null, // DA2 receiver battery
-            receiverHealth = null, // DA2 receiver health
             // Mobile GPS data (always included)
             mobileDeviceId = deviceId, // Mobile device ID (always present)
             mobileLatitude = null, // Mobile GPS coordinates - null initially
@@ -530,8 +528,6 @@ class TmmRelayService : Service() {
             userId = null, // DA2 user data
             userName = null, // DA2 user data
             userEmail = null, // DA2 user data
-            receiverBattery = null, // DA2 receiver battery
-            receiverHealth = null, // DA2 receiver health
             // Mobile GPS data (always included)
             mobileDeviceId = DeviceInfoUtil.deviceId(this), // Mobile device ID (always present)
             mobileLatitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLatitude else null,
@@ -570,8 +566,6 @@ class TmmRelayService : Service() {
             userId = null, // DA2 user data
             userName = null, // DA2 user data
             userEmail = null, // DA2 user data
-            receiverBattery = null, // DA2 receiver battery
-            receiverHealth = null, // DA2 receiver health
             // Mobile GPS data (always included)
             mobileDeviceId = DeviceInfoUtil.deviceId(this), // Mobile device ID (always present)
             mobileLatitude = if (mobileLatitude != 0.0 || mobileLongitude != 0.0) mobileLatitude else null,  // Mobile GPS coordinates only
@@ -618,8 +612,6 @@ class TmmRelayService : Service() {
             userId = null, // DA2 user data
             userName = null, // DA2 user data
             userEmail = null, // DA2 user data
-            receiverBattery = null, // DA2 receiver battery
-            receiverHealth = null, // DA2 receiver health
             // Mobile GPS data (always included)
             mobileDeviceId = deviceId, // Mobile device ID (always present)
             mobileLatitude = mobileLatitude,  // Mobile GPS coordinates only
