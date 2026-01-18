@@ -94,7 +94,7 @@ class CatalystClient(
         properties.setProperty(CONFIG_KEY_DRIVER_TYPE, trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS.name) // Default to TrimbleGNSS (matching demo line 996)
         properties.setProperty(CONFIG_KEY_CONNECTION_TYPE, "Bluetooth")
         properties.setProperty(CONFIG_KEY_DEVICE_ADDRESS, "")
-        properties.setProperty(CONFIG_KEY_DEVICE_NAME, "")
+        properties.setProperty(CONFIG_KEY_DEVICE_NAME, "90:7B:C6:B4:12:30")
         properties.setProperty(CONFIG_KEY_DEVICE_PORT_NO, "")
         writeConfigToFile(properties)
     }
