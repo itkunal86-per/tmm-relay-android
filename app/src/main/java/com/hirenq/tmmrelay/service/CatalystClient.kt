@@ -734,20 +734,17 @@ class CatalystClient(
                //     }
                // }
 
-              val sp = facade!!.getSensorProperties().returnedObject
-                    // Log entire SensorProperties object as string
-                    LogCapture.log(Log.INFO, TAG, "=== SensorProperties returnedObject (as String) ===")
-                    LogCapture.log(Log.INFO, TAG, "returnedObject.toString(): ${sp.toString()}")
-                    LogCapture.log(Log.INFO, TAG, "=== SensorProperties Details ===")
-                    LogCapture.log(Log.INFO, TAG, "Instrument Name: ${sp.instrumentName}")
-                    LogCapture.log(Log.INFO, TAG, "Serial Number: ${sp.serialNumber}")
-                    LogCapture.log(Log.INFO, TAG, "Firmware: ${sp.firmware}")
-                    LogCapture.log(Log.INFO, TAG, "Licensed: ${sp.isLicensed()}")
-                    LogCapture.log(Log.INFO, TAG, "================================")
-                    LogCapture.log(Log.INFO, TAG, "✅ Licensed: ${sp.instrumentName}:${sp.serialNumber}")
-                 
-
-               
+                val sp = facade!!.getSensorProperties().returnedObject
+                // Log entire SensorProperties object as string
+                LogCapture.log(Log.INFO, TAG, "=== SensorProperties returnedObject (as String) ===")
+                LogCapture.log(Log.INFO, TAG, "returnedObject.toString(): ${sp.toString()}")
+                LogCapture.log(Log.INFO, TAG, "=== SensorProperties Details ===")
+                LogCapture.log(Log.INFO, TAG, "Instrument Name: ${sp.instrumentName}")
+                LogCapture.log(Log.INFO, TAG, "Serial Number: ${sp.serialNumber}")
+                LogCapture.log(Log.INFO, TAG, "Firmware: ${sp.firmware}")
+                LogCapture.log(Log.INFO, TAG, "Licensed: ${sp.isLicensed()}")
+                LogCapture.log(Log.INFO, TAG, "================================")
+                LogCapture.log(Log.INFO, TAG, "✅ Licensed: ${sp.instrumentName}:${sp.serialNumber}")
 
                 /* ---------------- Step 6: Add Event Listener (only after license check) ---------------- */
               //  LogCapture.log(Log.INFO, TAG, "Adding event listener...")
