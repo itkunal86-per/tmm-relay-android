@@ -484,7 +484,9 @@ class CatalystClient(
                         LogCapture.log(Log.INFO, TAG, "Issue Date: ${subscriptionDetails.issueDate}")
                         LogCapture.log(Log.INFO, TAG, "Expiry Date: ${subscriptionDetails.expiryDate}")
                     }
-                } else {
+                } 
+                else
+                {
                     // Use TMM subscription (default)
                     LogCapture.log(Log.INFO, TAG, "Loading subscription from TMM...")
                     val loadSubRc = facade!!.loadSubscription()
@@ -643,7 +645,8 @@ class CatalystClient(
                                 
                                 LogCapture.log(Log.INFO, TAG, "Connecting via Bluetooth to address: $deviceAddress")
                                 LogCapture.log(Log.DEBUG, TAG, "Driver type: $driverType, Bluetooth address: $deviceAddress")
-                                facade!!.connectViaBluetooth(deviceAddress)
+                              //  facade!!.connectViaBluetooth(deviceAddress)
+                                facade!!.connect()
                             }
                             "TcpIp" -> {
                                 // TcpIp is only valid for TrimbleGNSS (validated in validateConnectionConfig)
@@ -731,11 +734,7 @@ class CatalystClient(
                //     }
                // }
 
-             
-
-               if (waitForLicense(facade!!))
-                  {
-                    val sp = facade!!.getSensorProperties().returnedObject
+              val sp = facade!!.getSensorProperties().returnedObject
                     // Log entire SensorProperties object as string
                     LogCapture.log(Log.INFO, TAG, "=== SensorProperties returnedObject (as String) ===")
                     LogCapture.log(Log.INFO, TAG, "returnedObject.toString(): ${sp.toString()}")
@@ -746,14 +745,9 @@ class CatalystClient(
                     LogCapture.log(Log.INFO, TAG, "Licensed: ${sp.isLicensed()}")
                     LogCapture.log(Log.INFO, TAG, "================================")
                     LogCapture.log(Log.INFO, TAG, "✅ Licensed: ${sp.instrumentName}:${sp.serialNumber}")
-                  }
-             else {
-                    LogCapture.log(Log.ERROR, TAG, "❌ License not granted within timeout")
-                    facade!!.disconnectFromSensor()
-                    currentError = "NOT_LICENSED"
-                    onError(RuntimeException("Instrument license timeout"))
-                    return@Thread
-                 }
+                 
+
+               
 
                 /* ---------------- Step 6: Add Event Listener (only after license check) ---------------- */
               //  LogCapture.log(Log.INFO, TAG, "Adding event listener...")
