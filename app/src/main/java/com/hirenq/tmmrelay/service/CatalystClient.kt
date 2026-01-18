@@ -646,7 +646,7 @@ class CatalystClient(
                                 LogCapture.log(Log.INFO, TAG, "Connecting via Bluetooth to address: $deviceAddress")
                                 LogCapture.log(Log.DEBUG, TAG, "Driver type: $driverType, Bluetooth address: $deviceAddress")
                               //  facade!!.connectViaBluetooth(deviceAddress)
-                                facade!!.connect()
+                                // facade!!.connect()
                             }
                             "TcpIp" -> {
                                 // TcpIp is only valid for TrimbleGNSS (validated in validateConnectionConfig)
@@ -676,33 +676,7 @@ class CatalystClient(
                     }
                 }
                 
-                if (retCode.code != DriverReturnCode.Success) {
-                    val errorMsg = "Connect failed: ${retCode.code} for driver: $driverType"
-                    LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
-                    LogCapture.log(Log.ERROR, TAG, "Driver type: $driverType")
-                    LogCapture.log(Log.ERROR, TAG, "Connection type: $connectionType")
-                    LogCapture.log(Log.ERROR, TAG, "Device address: $deviceAddress")
-                    LogCapture.log(Log.ERROR, TAG, "Return code: ${retCode.code}")
-                    
-                    // Provide specific troubleshooting for Bluetooth connections
-                    if (connectionType == "Bluetooth") {
-                        LogCapture.log(Log.ERROR, TAG, "Bluetooth connection troubleshooting:")
-                        LogCapture.log(Log.ERROR, TAG, "  1. Ensure Bluetooth is enabled on device")
-                        LogCapture.log(Log.ERROR, TAG, "  2. Verify BLUETOOTH_CONNECT and BLUETOOTH_SCAN permissions are granted")
-                        LogCapture.log(Log.ERROR, TAG, "  3. Check DeviceAddress is correct MAC address format (e.g., 00:11:22:33:44:55)")
-                        LogCapture.log(Log.ERROR, TAG, "  4. Ensure DA2 receiver is powered on and in pairing mode")
-                        LogCapture.log(Log.ERROR, TAG, "  5. Try pairing the device manually in Android Bluetooth settings first")
-                    }
-                    
-                    currentError = "CONNECT_FAILED"
-                    onError(RuntimeException(errorMsg))
-                    return@Thread
-                } else {
-                    LogCapture.log(Log.INFO, TAG, "✅ Connect success: $driverType")
-                    if (connectionType == "Bluetooth") {
-                        LogCapture.log(Log.INFO, TAG, "   Connected to Bluetooth device: $deviceAddress")
-                    }
-                }
+               
 
                 /* 🔴 REQUIRED IN 2025.12.5 — ADD LISTENER IMMEDIATELY */
                 LogCapture.log(Log.INFO, TAG, "Adding event listener (early)...")
