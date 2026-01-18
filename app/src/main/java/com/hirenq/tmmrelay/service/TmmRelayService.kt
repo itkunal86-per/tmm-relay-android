@@ -131,13 +131,45 @@ class TmmRelayService : Service() {
                 putExtra("receiverBattery", it)
             }
             
-            // Add GNSS coordinates
-            putExtra("latitude", payload.latitude)
-            putExtra("longitude", payload.longitude)
-            
             // Add connection status and error state
             val isConnected = catalystClient?.getConnectionStatus() ?: false
             putExtra("isConnected", isConnected)
+            
+            // GNSS coordinates: Use DA2 coordinates if connected, otherwise use payload coordinates
+            // When DA2 is connected, payload should have DA2 coordinates from CatalystClient
+            // But we also need to ensure we're not using mobile GPS when DA2 is available
+            val gnssLatitude: Double
+            val gnssLongitude: Double
+            
+            if (isConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+                // DA2 is connected and we have DA2 coordinates - use them
+                gnssLatitude = lastKnownLatitude
+                gnssLongitude = lastKnownLongitude
+            } else if (payload.dataSource == "TRIMBLE" && (payload.latitude != 0.0 || payload.longitude != 0.0)) {
+                // Payload explicitly marked as TRIMBLE - use its coordinates
+                gnssLatitude = payload.latitude
+                gnssLongitude = payload.longitude
+            } else {
+                // Fallback to payload coordinates (could be mobile GPS if DA2 not connected)
+                gnssLatitude = payload.latitude
+                gnssLongitude = payload.longitude
+            }
+            
+            // Add GNSS coordinates (preferring DA2 over mobile GPS)
+            putExtra("latitude", gnssLatitude)
+            putExtra("longitude", gnssLongitude)
+            
+            // Add data source: Determine if coordinates are from DA2 or Mobile GPS
+            val dataSource: String = if (isConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+                "DA2" // DA2 (Trimble) coordinates
+            } else if (payload.dataSource == "TRIMBLE" && (gnssLatitude != 0.0 || gnssLongitude != 0.0)) {
+                "DA2" // DA2 (Trimble) coordinates
+            } else if (gnssLatitude != 0.0 || gnssLongitude != 0.0) {
+                "Mobile GPS" // Mobile GPS coordinates
+            } else {
+                "N/A" // No coordinates available
+            }
+            putExtra("dataSource", dataSource)
                      
             catalystClient?.getCurrentError()?.let { error ->
                 putExtra("error", error)

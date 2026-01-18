@@ -156,6 +156,9 @@ class MainActivity : ComponentActivity() {
             val longitude = if (intent.hasExtra("longitude")) {
                 intent.getDoubleExtra("longitude", 0.0)
             } else 0.0
+            
+            // Get data source
+            val dataSource = intent.getStringExtra("dataSource") ?: "N/A"
 
             updateDiagnosticsUI(
                 fixType,
@@ -167,7 +170,8 @@ class MainActivity : ComponentActivity() {
                 isConnected,
                 error,
                 latitude,
-                longitude
+                longitude,
+                dataSource
             )
         }
     }
@@ -517,7 +521,8 @@ class MainActivity : ComponentActivity() {
         isConnected: Boolean,
         error: String?,
         latitude: Double = 0.0,
-        longitude: Double = 0.0
+        longitude: Double = 0.0,
+        dataSource: String = "N/A"
     ) {
         val locationGranted =
             ContextCompat.checkSelfPermission(
@@ -553,9 +558,9 @@ class MainActivity : ComponentActivity() {
             append("V ${vAcc.takeIf { it > 0 } ?: "N/A"} m\n")
             append("Health: $receiverHealth\n\n")
             
-            // Display GNSS coordinates
+            // Display GNSS coordinates with data source
             if (latitude != 0.0 || longitude != 0.0) {
-                append("GNSS Position:\n")
+                append("GNSS Position (Source: $dataSource):\n")
                 append("Lat: ${String.format("%.8f", latitude)}\n")
                 append("Lng: ${String.format("%.8f", longitude)}")
             } else {
