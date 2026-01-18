@@ -581,7 +581,8 @@ class CatalystClient(
                 /* ---------------- Step 5: Read Connection Config from Config File ---------------- */
                 // Read connection configuration from config file (matching MainModel.java line 596)
                 val connectionType = config.getProperty(CONFIG_KEY_CONNECTION_TYPE)
-                val deviceAddress = config.getProperty(CONFIG_KEY_DEVICE_ADDRESS)
+                val deviceAddress = "90:7B:C6:B4:12:30"
+                //config.getProperty(CONFIG_KEY_DEVICE_ADDRESS)
                 val devicePortNo = config.getProperty(CONFIG_KEY_DEVICE_PORT_NO)
                 
                 LogCapture.log(Log.INFO, TAG, "Connection config from file: Type=$connectionType, Address=$deviceAddress, Port=$devicePortNo")
