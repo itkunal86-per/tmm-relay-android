@@ -1,5 +1,6 @@
 package com.hirenq.tmmrelay.service
 
+import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -183,6 +184,30 @@ class CatalystClient(
             }
         }
         return true
+    }
+
+    private fun hasBluetoothPermissions(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val connectGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+            val scanGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_SCAN
+            ) == PackageManager.PERMISSION_GRANTED
+            connectGranted && scanGranted
+        } else {
+            val bluetoothGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH
+            ) == PackageManager.PERMISSION_GRANTED
+            val adminGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_ADMIN
+            ) == PackageManager.PERMISSION_GRANTED
+            bluetoothGranted && adminGranted
+        }
     }
     private var facade: CatalystFacade? = null
     private var tenantId: String = ""
