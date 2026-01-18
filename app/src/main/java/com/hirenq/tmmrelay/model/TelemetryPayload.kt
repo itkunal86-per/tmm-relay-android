@@ -2,31 +2,30 @@ package com.hirenq.tmmrelay.model
 
 data class TelemetryPayload(
     val tenantId: String,
-    val deviceId: String,
-    val latitude: Double,
-    val longitude: Double,
-    val battery: Int, // Mobile device battery
-    val fixType: String,
-    val timestamp: String,
-    val health: String,
-    val horizontalAccuracy: Double,
-    val verticalAccuracy: Double,
-    val satellites: Int,
-    val userId: String? = null,
-    val userName: String? = null,
-    val userEmail: String? = null,
-    // Trimble receiver data
-    val receiverBattery: Int? = null,
-    val receiverHealth: String? = null,
-    val pdop: Double? = null,
-    val hdop: Double? = null,
-    val vdop: Double? = null,
+    val dataSource: String? = null, // "TRIMBLE" or "MOBILE_GPS" to indicate primary data source
+    val surveyData: String? = null, // JSON array string containing full DA2 survey data
+    
+    // DA2 receiver data (fields 5-17) - nullable, only from DA2 receiver if available
+    val deviceId: String? = null, // DA2 receiver device ID - nullable
+    val latitude: Double? = null, // DA2 (Trimble receiver) latitude - nullable, only from DA2
+    val longitude: Double? = null, // DA2 (Trimble receiver) longitude - nullable, only from DA2
+    val battery: Int? = null, // DA2 receiver battery - nullable
+    val fixType: String? = null, // DA2 receiver fix type - nullable
+    val timestamp: String? = null, // DA2 receiver timestamp - nullable
+    val health: String? = null, // DA2 receiver health - nullable
+    val horizontalAccuracy: Double? = null, // DA2 receiver horizontal accuracy - nullable
+    val verticalAccuracy: Double? = null, // DA2 receiver vertical accuracy - nullable
+    val satellites: Int? = null, // DA2 receiver satellites - nullable
+    val userId: String? = null, // DA2 user ID - nullable
+    val userName: String? = null, // DA2 user name - nullable
+    val userEmail: String? = null, // DA2 user email - nullable
+   
     // Mobile GPS data (always included)
+    val mobileDeviceId: String, // Mobile device ID - always present
     val mobileLatitude: Double? = null,
     val mobileLongitude: Double? = null,
     val mobileAccuracy: Double? = null,
-    val mobileBattery: Int? = null, // Same as battery, but explicitly included
+    val mobileBattery: Int? = null, // Mobile device battery
     val mobileBatteryHealth: String? = null, // Android device battery health (GOOD, DEAD, OVERHEAT, etc.)
-    val dataSource: String? = null, // "TRIMBLE" or "MOBILE_GPS" to indicate primary data source
-    val surveyData: String? = null // JSON array string containing full DA2 survey data
+  
 )

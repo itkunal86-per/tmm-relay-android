@@ -138,13 +138,6 @@ class MainActivity : ComponentActivity() {
             val satellites = intent.getIntExtra("satellites", 0)
             val hAcc = intent.getDoubleExtra("horizontalAccuracy", -1.0)
             val vAcc = intent.getDoubleExtra("verticalAccuracy", -1.0)
-            val receiverHealth =
-                intent.getStringExtra("receiverHealth") ?: "UNKNOWN"
-
-            val receiverBattery =
-                if (intent.hasExtra("receiverBattery"))
-                    intent.getIntExtra("receiverBattery", -1)
-                else null
 
             val isConnected = intent.getBooleanExtra("isConnected", false)
             val error = intent.getStringExtra("error")
@@ -165,8 +158,6 @@ class MainActivity : ComponentActivity() {
                 satellites,
                 hAcc,
                 vAcc,
-                receiverHealth,
-                receiverBattery,
                 isConnected,
                 error,
                 latitude,
@@ -516,8 +507,6 @@ class MainActivity : ComponentActivity() {
         satellites: Int,
         hAcc: Double,
         vAcc: Double,
-        receiverHealth: String,
-        receiverBattery: Int?,
         isConnected: Boolean,
         error: String?,
         latitude: Double = 0.0,
@@ -543,7 +532,6 @@ class MainActivity : ComponentActivity() {
 
             append("Receiver:\n")
             append(if (isConnected) "✔ Connected\n" else "✘ Not Connected- Survey Not Started\n")
-            append("Battery: ${receiverBattery?.let { "$it%" } ?: "N/A"}\n")
             
             // Display error if present
             error?.let {
@@ -555,8 +543,7 @@ class MainActivity : ComponentActivity() {
             append("FixType: $fixType\n")
             append("Satellites: $satellites\n")
             append("Accuracy: H ${hAcc.takeIf { it > 0 } ?: "N/A"} m, ")
-            append("V ${vAcc.takeIf { it > 0 } ?: "N/A"} m\n")
-            append("Health: $receiverHealth\n\n")
+            append("V ${vAcc.takeIf { it > 0 } ?: "N/A"} m\n\n")
             
             // Display GNSS coordinates with data source
             if (latitude != 0.0 || longitude != 0.0) {

@@ -29,11 +29,17 @@ object ApiClient {
         onPostSent: ((String, String, Boolean) -> Unit)? = null
     ) {
         // Ensure Timestamp is in UTC format (with Z suffix) - parse and reformat if needed
-        val timestamp = try {
-            // If payload.timestamp is already in ISO format, use it; otherwise parse and format
-            Instant.parse(payload.timestamp).toString()
-        } catch (e: Exception) {
-            // Fallback to current time in UTC if parsing fails
+        // Use DA2 timestamp if available, else use current timestamp
+        val timestamp = if (payload.timestamp != null) {
+            try {
+                // If payload.timestamp is already in ISO format, use it; otherwise parse and format
+                Instant.parse(payload.timestamp).toString()
+            } catch (e: Exception) {
+                // Fallback to current time in UTC if parsing fails
+                Instant.now().toString()
+            }
+        } else {
+            // Use current time in UTC if DA2 timestamp is not available
             Instant.now().toString()
         }
 
@@ -47,31 +53,26 @@ object ApiClient {
         val json = JSONObject().apply {
             // Required fields - ALWAYS include
             put("TenantId", payload.tenantId)
-            put("DeviceId", payload.deviceId)
-            put("Latitude", payload.latitude)
-            put("Longitude", payload.longitude)
-            put("Battery", payload.battery) // Mobile device battery
-            put("FixType", payload.fixType)
-            put("Timestamp", timestamp)
+            // Mobile GPS data - ALWAYS include
+            put("MobileDeviceId", payload.mobileDeviceId)
+            
+            // DA2 receiver data (fields 5-17) - nullable, only from DA2 if available
+            put("DeviceId", payload.deviceId ?: JSONObject.NULL) // DA2 receiver device ID
+            put("Latitude", payload.latitude ?: JSONObject.NULL) // DA2 coordinates
+            put("Longitude", payload.longitude ?: JSONObject.NULL) // DA2 coordinates
+            put("Battery", payload.battery ?: JSONObject.NULL) // DA2 receiver battery
+            put("FixType", payload.fixType ?: JSONObject.NULL) // DA2 fix type
+            put("Timestamp", timestamp) // DA2 timestamp (processed above) or current timestamp
             put("CurrentTimestamp", currentTimestamp)
-            put("Health", payload.health)
-            put("HorizontalAccuracy", payload.horizontalAccuracy)
-            put("VerticalAccuracy", payload.verticalAccuracy)
-            put("Satellites", payload.satellites)
+            put("Health", payload.health ?: JSONObject.NULL) // DA2 health
+            put("HorizontalAccuracy", payload.horizontalAccuracy ?: JSONObject.NULL) // DA2 horizontal accuracy
+            put("VerticalAccuracy", payload.verticalAccuracy ?: JSONObject.NULL) // DA2 vertical accuracy
+            put("Satellites", payload.satellites ?: JSONObject.NULL) // DA2 satellites
             
             // Optional user details - always include
             put("UserId", payload.userId ?: JSONObject.NULL)
             put("UserName", payload.userName ?: JSONObject.NULL)
             put("UserEmail", payload.userEmail ?: JSONObject.NULL)
-            
-            // Optional Trimble receiver details - always include
-            put("ReceiverBattery", payload.receiverBattery ?: JSONObject.NULL)
-            put("ReceiverHealth", payload.receiverHealth ?: JSONObject.NULL)
-            
-            // Optional DOP values (from Trimble receiver) - always include
-            put("PDOP", payload.pdop ?: JSONObject.NULL)
-            put("HDOP", payload.hdop ?: JSONObject.NULL)
-            put("VDOP", payload.vdop ?: JSONObject.NULL)
             
             // Mobile GPS data - ALWAYS include
             put("MobileLatitude", payload.mobileLatitude ?: JSONObject.NULL)
@@ -97,13 +98,11 @@ object ApiClient {
         val jsonString = json.toString()
         Log.i(TAG, "=== Sending POST request to $API_URL ===")
         Log.i(TAG, "Full payload JSON: $jsonString")
-        Log.d(TAG, "Payload fields: TenantId=${payload.tenantId}, DeviceId=${payload.deviceId}, " +
-                "Lat=${payload.latitude}, Lng=${payload.longitude}, Battery=${payload.battery}, " +
-                "FixType=${payload.fixType}, Health=${payload.health}, " +
+        Log.d(TAG, "Payload fields: TenantId=${payload.tenantId}, MobileDeviceId=${payload.mobileDeviceId}, " +
+                "DeviceId=${payload.deviceId}, Lat=${payload.latitude}, Lng=${payload.longitude}, " +
+                "Battery=${payload.battery}, FixType=${payload.fixType}, Health=${payload.health}, " +
                 "HAcc=${payload.horizontalAccuracy}, VAcc=${payload.verticalAccuracy}, " +
-                "Satellites=${payload.satellites}, ReceiverBattery=${payload.receiverBattery}, " +
-                "ReceiverHealth=${payload.receiverHealth}, PDOP=${payload.pdop}, " +
-                "HDOP=${payload.hdop}, VDOP=${payload.vdop}, " +
+                "Satellites=${payload.satellites}, " +
                 "MobileLat=${payload.mobileLatitude}, MobileLng=${payload.mobileLongitude}, " +
                 "MobileAcc=${payload.mobileAccuracy}, MobileBattery=${payload.mobileBattery}, " +
                 "MobileBatteryHealth=${payload.mobileBatteryHealth}, DataSource=${payload.dataSource}")
@@ -151,7 +150,8 @@ object ApiClient {
                 } else {
                     Log.i(TAG, "API request successful")
                     // Notify callback with timestamp and payload summary (isSuccess = true)
-                    val payloadSummary = "Lat:${payload.latitude}, Lng:${payload.longitude}, Bat:${payload.battery}%"
+                    val payloadSummary = "DA2:Lat:${payload.latitude}, Lng:${payload.longitude}, Bat:${payload.battery}%, " +
+                            "Mobile:Lat:${payload.mobileLatitude}, Lng:${payload.mobileLongitude}, Bat:${payload.mobileBattery}%"
                     Log.d(TAG, "Invoking onPostSent callback on success: $timestamp - $payloadSummary")
                     onPostSent?.invoke(timestamp, payloadSummary, true)
                 }

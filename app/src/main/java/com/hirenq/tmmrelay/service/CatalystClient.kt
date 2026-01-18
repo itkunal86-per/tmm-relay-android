@@ -809,29 +809,31 @@ class CatalystClient(
             // Build full survey data JSON array from PositionUpdate
             val surveyDataArray = buildSurveyDataArray(position)
             
+            // Get DA2 receiver battery (nullable)
+            val da2Battery = try { latestBattery?.getBatteryLevel() } catch (e: Exception) { null }?.takeIf { it in 0..100 }
+            
             val payload = TelemetryPayload(
                 tenantId = tenantId,
-                deviceId = deviceId,
-                latitude = latDegrees,
-                longitude = lonDegrees,
-                battery = try { latestBattery?.getBatteryLevel() } catch (e: Exception) { null }
-                    ?: DeviceInfoUtil.batteryLevel(context), // Use receiver battery if available, else phone battery
-                fixType = fixTypeName,
-                timestamp = Instant.now().toString(),
-                health = health,
-                horizontalAccuracy = hPrecision,
-                verticalAccuracy = vPrecision,
-                satellites = latestSatellitesInView,
-                receiverBattery = try { latestBattery?.getBatteryLevel() } catch (e: Exception) { null }?.takeIf { it in 0..100 },
-                pdop = if (pdopValue.isNaN() || pdopValue.isInfinite()) null else pdopValue,
-                hdop = if (hdopValue.isNaN() || hdopValue.isInfinite()) null else hdopValue,
-                vdop = if (vdopValue.isNaN() || vdopValue.isInfinite()) null else vdopValue,
-                receiverHealth = receiverHealth,
-                // Mobile GPS data will be added by TmmRelayService
-                mobileLatitude = null,
-                mobileLongitude = null,
-                mobileAccuracy = null,
-                mobileBattery = null,
+                // DA2 receiver data (nullable) - fields 5-17
+                deviceId = null, // DA2 receiver device ID (not available yet, can be set later if needed)
+                latitude = latDegrees.takeIf { it != 0.0 && !it.isNaN() && !it.isInfinite() }, // DA2 coordinates
+                longitude = lonDegrees.takeIf { it != 0.0 && !it.isNaN() && !it.isInfinite() }, // DA2 coordinates
+                battery = da2Battery, // DA2 receiver battery
+                fixType = fixTypeName, // DA2 fix type
+                timestamp = Instant.now().toString(), // DA2 timestamp
+                health = health, // DA2 health
+                horizontalAccuracy = hPrecision.takeIf { it >= 0 && !it.isNaN() && !it.isInfinite() }, // DA2 horizontal accuracy
+                verticalAccuracy = vPrecision.takeIf { it >= 0 && !it.isNaN() && !it.isInfinite() }, // DA2 vertical accuracy
+                satellites = if (latestSatellitesInView >= 0) latestSatellitesInView else null, // DA2 satellites
+                userId = null, // DA2 user data (not available)
+                userName = null, // DA2 user data (not available)
+                userEmail = null, // DA2 user data (not available)
+                // Mobile GPS data (always included) - will be enriched by TmmRelayService
+                mobileDeviceId = deviceId, // Mobile device ID (always present)
+                mobileLatitude = null, // Will be added by TmmRelayService
+                mobileLongitude = null, // Will be added by TmmRelayService
+                mobileAccuracy = null, // Will be added by TmmRelayService
+                mobileBattery = null, // Will be added by TmmRelayService
                 dataSource = "TRIMBLE", // This payload is from Trimble receiver
                 surveyData = surveyDataArray
             )
