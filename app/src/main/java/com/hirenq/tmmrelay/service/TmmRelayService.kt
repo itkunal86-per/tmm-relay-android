@@ -314,13 +314,23 @@ class TmmRelayService : Service() {
 
             // Always use Catalyst SDK
             // Driver type will be read from config file (matching demo MainModel.java pattern)
+            // Get userTID from SharedPreferences (set by MainActivity after TMM Login)
+            val userTID = getSharedPreferences("TmmRelayPrefs", Context.MODE_PRIVATE)
+                .getString("userTID", null)
+            if (userTID != null) {
+                android.util.Log.i("TmmRelayService", "Using userTID from TMM Login: $userTID")
+            } else {
+                android.util.Log.i("TmmRelayService", "No userTID found - will use default TMM subscription")
+            }
+            
             android.util.Log.i("TmmRelayService", "Step 3: Creating CatalystClient instance")
             catalystClient = CatalystClient(
                 context = this,
                 onMessage = payloadHandler,
                 onError = { error ->
                     handleCatalystError(error)
-                }
+                },
+                userTID = userTID  // Pass userTID to use loadSubscriptionFromTrimbleMobileManager
             )
             android.util.Log.i("TmmRelayService", "Step 3: CatalystClient created")
 
@@ -399,6 +409,22 @@ class TmmRelayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // START_STICKY ensures service restarts if killed by system
         // Important for Android 10-16 and Samsung One UI compatibility
+        
+        // Get userTID from intent if provided (e.g., after TMM Login)
+        val intentUserTID = intent?.getStringExtra("userTID")
+        if (intentUserTID != null && intentUserTID.isNotEmpty()) {
+            // Update SharedPreferences with new userTID
+            getSharedPreferences("TmmRelayPrefs", Context.MODE_PRIVATE)
+                .edit()
+                .putString("userTID", intentUserTID)
+                .apply()
+            android.util.Log.i("TmmRelayService", "Received userTID from intent: $intentUserTID")
+            
+            // If CatalystClient exists, restart connection with new userTID
+            // Note: This requires recreating CatalystClient since userTID is set at construction
+            // For now, service restart is required for userTID changes
+        }
+        
         return START_STICKY
     }
 

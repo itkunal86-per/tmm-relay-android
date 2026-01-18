@@ -20,6 +20,8 @@ import com.hirenq.tmmrelay.databinding.ActivityMainBinding
 import com.hirenq.tmmrelay.service.TmmRelayService
 import com.hirenq.tmmrelay.util.CrashHandler
 import com.hirenq.tmmrelay.util.LogCapture
+import java.util.Timer
+import java.util.TimerTask
 
 class MainActivity : ComponentActivity() {
 
@@ -31,6 +33,16 @@ class MainActivity : ComponentActivity() {
     private var previousSubscriptionAvailable: Boolean = false
     private var previousLicenseAvailable: Boolean = false
     private var previousReceiverConnected: Boolean = false
+    
+    // TMM Login state
+    private var userTID: String? = null
+    private val prefs: SharedPreferences by lazy {
+        getSharedPreferences("TmmRelayPrefs", Context.MODE_PRIVATE)
+    }
+    
+    // TID Token Refresh state (matching CatalystFacadeActivity.java)
+    private val USER_TOKEN_REFRESH_TIME_PERIOD = 5 * 60 * 60 * 1000L // 5 hours
+    private var userTokenRefreshTimer: Timer? = null
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -41,6 +53,64 @@ class MainActivity : ComponentActivity() {
                 LogCapture.log(android.util.Log.WARN, "MainActivity", "Some permissions were denied")
             }
         }
+    
+    // TMM Login launcher (using ActivityResultLauncher as per demo)
+    private val tmmLoginLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK && result.data != null) {
+            val accountTID = result.data?.getStringExtra("accountTID")
+            if (accountTID != null && accountTID.isNotEmpty()) {
+                userTID = accountTID
+                prefs.edit().putString("userTID", accountTID).apply()
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM Login successful - accountTID: $accountTID")
+                Toast.makeText(this, "Login successful", Toast.LENGTH_SHORT).show()
+                
+                // Store userTID for CatalystClient to use
+                // Restart service to apply new userTID
+                if (hasAllCriticalPermissions()) {
+                    startRelayService()
+                }
+            } else {
+                LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM Login returned empty accountTID")
+                Toast.makeText(this, "Login failed: No accountTID returned", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM Login cancelled or failed - resultCode: ${result.resultCode}")
+            Toast.makeText(this, "Login cancelled", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    // TID Token Refresh launcher (matching CatalystFacadeActivity.java)
+    private val tmmRefreshTokenLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            // Token refresh successful
+            if (result.data != null) {
+                val info = result.data?.getStringExtra("info")
+                if (info != null && !info.isEmpty()) {
+                    LogCapture.log(android.util.Log.INFO, "MainActivity", "User token refreshed successfully: $info")
+                } else {
+                    LogCapture.log(android.util.Log.INFO, "MainActivity", "User token refreshed successfully")
+                }
+            } else {
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "User token refreshed successfully")
+            }
+        } else if (result.resultCode == RESULT_CANCELED) {
+            // Token refresh cancelled or failed
+            if (result.data != null) {
+                val error = result.data?.getStringExtra("error")
+                if (error != null && !error.isEmpty()) {
+                    LogCapture.log(android.util.Log.WARN, "MainActivity", "User token refresh failed: $error")
+                } else {
+                    LogCapture.log(android.util.Log.WARN, "MainActivity", "User token refresh cancelled or failed")
+                }
+            } else {
+                LogCapture.log(android.util.Log.WARN, "MainActivity", "User token refresh cancelled or failed")
+            }
+        }
+    }
 
     // ---------------- STATUS RECEIVER ----------------
 
@@ -138,6 +208,12 @@ class MainActivity : ComponentActivity() {
 
         binding.btnAccessLog.setOnClickListener {
             startActivity(Intent(this, LogViewerActivity::class.java))
+        }
+        
+        // Load saved userTID if available
+        userTID = prefs.getString("userTID", null)
+        if (userTID != null) {
+            LogCapture.log(android.util.Log.INFO, "MainActivity", "Loaded saved userTID: $userTID")
         }
     }
     
@@ -317,6 +393,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         LogCapture.log(android.util.Log.INFO, "MainActivity", "=== onResume() started ===")
         
+        // Start token refresh timer (matching CatalystFacadeActivity.java)
+        startTokenRefreshTimer()
+        
         try {
             LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Section 1: Registering status receiver")
             LocalBroadcastManager.getInstance(this).registerReceiver(
@@ -364,6 +443,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        
+        // Stop token refresh timer (matching CatalystFacadeActivity.java)
+        stopTokenRefreshTimer()
+        
         try {
             LocalBroadcastManager.getInstance(this)
                 .unregisterReceiver(statusReceiver)
@@ -633,10 +716,80 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // ---------------- TMM LOGIN ----------------
+    
+    private fun loginViaTMM() {
+        try {
+            val intent = Intent("com.trimble.tmm.LOGIN").apply {
+                putExtra("applicationID", packageName)
+                putExtra("noInstall", true)
+            }
+            tmmLoginLauncher.launch(intent)
+            LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM Login intent launched")
+        } catch (e: Exception) {
+            LogCapture.log(android.util.Log.ERROR, "MainActivity", "Failed to launch TMM Login: ${e.message}", e)
+            Toast.makeText(this, "TMM Login failed: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+    
+    // ---------------- TID TOKEN REFRESH (matching CatalystFacadeActivity.java) ----------------
+    
+    /**
+     * Refreshes user token using TMM Intent - "com.trimble.tmm.RefreshUserToken"
+     * This intent returns info and error in simple text format via ActivityResultLauncher
+     * Called periodically (every 5 hours) to keep TID tokens fresh
+     */
+    private fun refreshUserToken() {
+        try {
+            val intent = Intent("com.trimble.tmm.RefreshUserToken").apply {
+                putExtra("applicationID", packageName)
+            }
+            tmmRefreshTokenLauncher.launch(intent)
+            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Started RefreshUserToken intent for applicationID: $packageName")
+        } catch (e: Exception) {
+            LogCapture.log(android.util.Log.ERROR, "MainActivity", "Failed to start RefreshUserToken intent", e)
+        }
+    }
+    
+    /**
+     * Starts the token refresh timer (matching CatalystFacadeActivity.java onResume)
+     * Refreshes token every 5 hours to keep TID tokens valid
+     */
+    private fun startTokenRefreshTimer() {
+        if (userTokenRefreshTimer == null) {
+            userTokenRefreshTimer = Timer()
+            userTokenRefreshTimer?.scheduleAtFixedRate(
+                object : TimerTask() {
+                    override fun run() {
+                        // startActivityForResult/ActivityResultLauncher must be called from main thread
+                        runOnUiThread {
+                            refreshUserToken()
+                        }
+                    }
+                },
+                USER_TOKEN_REFRESH_TIME_PERIOD,
+                USER_TOKEN_REFRESH_TIME_PERIOD
+            )
+            LogCapture.log(android.util.Log.INFO, "MainActivity", "Token refresh timer started (period: ${USER_TOKEN_REFRESH_TIME_PERIOD / 1000 / 60} minutes)")
+        }
+    }
+    
+    /**
+     * Stops the token refresh timer (matching CatalystFacadeActivity.java onStop)
+     */
+    private fun stopTokenRefreshTimer() {
+        userTokenRefreshTimer?.cancel()
+        userTokenRefreshTimer = null
+        LogCapture.log(android.util.Log.INFO, "MainActivity", "Token refresh timer stopped")
+    }
+
     // ---------------- SERVICE ----------------
 
     private fun startRelayService() {
-        val intent = Intent(this, TmmRelayService::class.java)
+        val intent = Intent(this, TmmRelayService::class.java).apply {
+            // Pass userTID to service so CatalystClient can use it
+            userTID?.let { putExtra("userTID", it) }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             ContextCompat.startForegroundService(this, intent)
         } else {

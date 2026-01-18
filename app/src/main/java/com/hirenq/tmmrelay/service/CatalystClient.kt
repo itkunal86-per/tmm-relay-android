@@ -38,7 +38,9 @@ class CatalystClient(
     private val onMessage: (TelemetryPayload) -> Unit,
     private val onError: (Throwable) -> Unit = {},
     // Device license subscription (alternative to TMM subscription)
-    private val deviceLicense: String? = null   // Device license string - if provided, uses loadDeviceSubscription instead of loadSubscription
+    private val deviceLicense: String? = null,   // Device license string - if provided, uses loadDeviceSubscription instead of loadSubscription
+    // TMM user TID for subscription loading (alternative to loadSubscription())
+    private val userTID: String? = null          // User TID from TMM Login - if provided, uses loadSubscriptionFromTrimbleMobileManager(userTID)
 ) {
     
     // Config file (matching MainModel.java getConfigFile() line 359-364)
@@ -467,37 +469,49 @@ class CatalystClient(
                 LogCapture.log(Log.INFO, TAG, "✅ Facade created")
 
                 /* ---------------- Step 2: Load Subscription ---------------- */
-                // Support both TMM subscription and device license subscription
-                if (deviceLicense != null && deviceLicense.isNotEmpty()) {
-                    // Use device license subscription (V2 licensing)
-                    LogCapture.log(Log.INFO, TAG, "Loading device license subscription...")
-                    val loadSubResult = facade!!.loadDeviceSubscription(deviceLicense)
-                    if (loadSubResult.code != DriverReturnCode.Success) {
-                        LogCapture.log(Log.ERROR, TAG, "❌ Load device subscription failed: ${loadSubResult.code}")
-                        currentError = "NO_SUBSCRIPTION"
-                        onError(RuntimeException("Load device subscription failed: ${loadSubResult.code}"))
-                        return@Thread
-                    } else {
-                        val subscriptionDetails = loadSubResult.returnedObject
-                        LogCapture.log(Log.INFO, TAG, "✅ Load device subscription success")
-                        LogCapture.log(Log.INFO, TAG, "Subscription: ${subscriptionDetails.subscriptionName}")
-                        LogCapture.log(Log.INFO, TAG, "Issue Date: ${subscriptionDetails.issueDate}")
-                        LogCapture.log(Log.INFO, TAG, "Expiry Date: ${subscriptionDetails.expiryDate}")
+                // Support three subscription types (matching demo MainModel.java):
+                // 1. Device license subscription (V2 licensing) - highest priority
+                // 2. TMM user subscription with userTID (loadSubscriptionFromTrimbleMobileManager)
+                // 3. Default TMM subscription (loadSubscription) - fallback
+                val loadSubRc = when {
+                    deviceLicense != null && deviceLicense.isNotEmpty() -> {
+                        // Use device license subscription (V2 licensing)
+                        LogCapture.log(Log.INFO, TAG, "Loading device license subscription...")
+                        val loadSubResult = facade!!.loadDeviceSubscription(deviceLicense)
+                        if (loadSubResult.code == DriverReturnCode.Success) {
+                            val subscriptionDetails = loadSubResult.returnedObject
+                            LogCapture.log(Log.INFO, TAG, "✅ Load device subscription success")
+                            LogCapture.log(Log.INFO, TAG, "Subscription: ${subscriptionDetails.subscriptionName}")
+                            LogCapture.log(Log.INFO, TAG, "Issue Date: ${subscriptionDetails.issueDate}")
+                            LogCapture.log(Log.INFO, TAG, "Expiry Date: ${subscriptionDetails.expiryDate}")
+                        }
+                        loadSubResult.code
                     }
-                } 
-                else
-                {
-                    // Use TMM subscription (default)
-                    LogCapture.log(Log.INFO, TAG, "Loading subscription from TMM...")
-                    val loadSubRc = facade!!.loadSubscription()
-                    if (loadSubRc.code != DriverReturnCode.Success) {
-                        LogCapture.log(Log.ERROR, TAG, "❌ Load subscription failed: ${loadSubRc.code}")
-                        currentError = "NO_SUBSCRIPTION"
-                        onError(RuntimeException("Load subscription failed: ${loadSubRc.code}"))
-                        return@Thread
-                    } else {
-                        LogCapture.log(Log.INFO, TAG, "✅ Load subscription success")
+                    userTID != null && userTID.isNotEmpty() -> {
+                        // Use TMM subscription with userTID (matching demo MainModel.java line 508)
+                        LogCapture.log(Log.INFO, TAG, "Loading subscription from TMM with userTID: $userTID...")
+                        val retCode = facade!!.loadSubscriptionFromTrimbleMobileManager(userTID)
+                        if (retCode.code == DriverReturnCode.Success) {
+                            LogCapture.log(Log.INFO, TAG, "✅ Load subscription from TMM success (userTID: $userTID)")
+                        }
+                        retCode.code
                     }
+                    else -> {
+                        // Use default TMM subscription (fallback)
+                        LogCapture.log(Log.INFO, TAG, "Loading subscription from TMM (default)...")
+                        val retCode = facade!!.loadSubscription()
+                        if (retCode.code == DriverReturnCode.Success) {
+                            LogCapture.log(Log.INFO, TAG, "✅ Load subscription success")
+                        }
+                        retCode.code
+                    }
+                }
+                
+                if (loadSubRc != DriverReturnCode.Success) {
+                    LogCapture.log(Log.ERROR, TAG, "❌ Load subscription failed: $loadSubRc")
+                    currentError = "NO_SUBSCRIPTION"
+                    onError(RuntimeException("Load subscription failed: $loadSubRc"))
+                    return@Thread
                 }
 
                 /* ---------------- Step 3: Read Config and Driver Type ---------------- */
@@ -645,8 +659,7 @@ class CatalystClient(
                                 
                                 LogCapture.log(Log.INFO, TAG, "Connecting via Bluetooth to address: $deviceAddress")
                                 LogCapture.log(Log.DEBUG, TAG, "Driver type: $driverType, Bluetooth address: $deviceAddress")
-                              //  facade!!.connectViaBluetooth(deviceAddress)
-                                // facade!!.connect()
+                                facade!!.connectViaBluetooth(deviceAddress)
                             }
                             "TcpIp" -> {
                                 // TcpIp is only valid for TrimbleGNSS (validated in validateConnectionConfig)
