@@ -74,30 +74,7 @@ class TmmRelayService : Service() {
 
     // -------------------- HELPER FUNCTIONS --------------------
     
-    /**
-     * Log sensor properties when DA2 receiver connects (called once per connection)
-     */
-    private fun logSensorPropertiesOnce() {
-        if (!sensorPropertiesLogged) {
-            try {
-                val sensorProps = catalystClient?.getSensorProperties()
-                if (sensorProps != null) {
-                    android.util.Log.i("TmmRelayService", "=== SensorProperties (from getSensorProperties) ===")
-                    android.util.Log.i("TmmRelayService", "Instrument Name: ${sensorProps.instrumentName}")
-                    android.util.Log.i("TmmRelayService", "Serial Number: ${sensorProps.serialNumber}")
-                    android.util.Log.i("TmmRelayService", "Firmware: ${sensorProps.firmware}")
-                    android.util.Log.i("TmmRelayService", "Licensed: ${sensorProps.isLicensed()}")
-                    android.util.Log.i("TmmRelayService", "returnedObject.toString(): ${sensorProps.toString()}")
-                    android.util.Log.i("TmmRelayService", "=== End SensorProperties ===")
-                    sensorPropertiesLogged = true
-                } else {
-                    android.util.Log.w("TmmRelayService", "Sensor properties not available yet")
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("TmmRelayService", "Error getting sensor properties: ${e.message}", e)
-            }
-        }
-    }
+    
     
     // Handle Catalyst client errors
     private fun handleCatalystError(error: Throwable) {
@@ -161,11 +138,7 @@ class TmmRelayService : Service() {
             // Add connection status and error state
             val isConnected = catalystClient?.getConnectionStatus() ?: false
             putExtra("isConnected", isConnected)
-            
-            // Log sensor properties when DA2 receiver connects (first time)
-            if (isConnected && !sensorPropertiesLogged) {
-                logSensorPropertiesOnce()
-            }
+                     
             catalystClient?.getCurrentError()?.let { error ->
                 putExtra("error", error)
             }

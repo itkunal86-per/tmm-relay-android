@@ -245,25 +245,7 @@ class CatalystClient(
         }
     }
     
-    /**
-     * Get sensor properties directly from the facade
-     * This queries the current sensor properties (matching CatalystFacade.java getSensorProperties)
-     * @return SensorProperties or null if sensor is not connected or properties not available
-     */
-    fun getSensorProperties(): SensorProperties? {
-        return try {
-            val sensorPropsRc = facade?.getSensorProperties()
-            if (sensorPropsRc?.code == DriverReturnCode.Success && sensorPropsRc.returnedObject != null) {
-                sensorPropsRc.returnedObject
-            } else {
-                LogCapture.log(Log.WARN, TAG, "Get sensor properties failed: ${sensorPropsRc?.code}")
-                null
-            }
-        } catch (e: Exception) {
-            LogCapture.log(Log.WARN, TAG, "Error getting sensor properties: ${e.message}", e)
-            null
-        }
-    }
+   
     
     // Track latest values from different event types
     private var latestPosition: PositionUpdate? = null
