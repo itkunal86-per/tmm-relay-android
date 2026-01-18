@@ -93,7 +93,7 @@ class CatalystClient(
         val properties = Properties()
         properties.setProperty(CONFIG_KEY_DRIVER_TYPE, trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS.name) // Default to TrimbleGNSS (matching demo line 996)
         properties.setProperty(CONFIG_KEY_CONNECTION_TYPE, "Bluetooth")
-        properties.setProperty(CONFIG_KEY_DEVICE_ADDRESS, "")
+        properties.setProperty(CONFIG_KEY_DEVICE_ADDRESS, "90:7B:C6:B4:12:30")
         properties.setProperty(CONFIG_KEY_DEVICE_NAME, "")
         properties.setProperty(CONFIG_KEY_DEVICE_PORT_NO, "")
         writeConfigToFile(properties)
@@ -184,26 +184,6 @@ class CatalystClient(
         }
         return true
     }
-    
-    // Check if Bluetooth permissions are granted (required for Bluetooth-enabled drivers)
-    private fun hasBluetoothPermissions(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Android 12+ requires BLUETOOTH_CONNECT and BLUETOOTH_SCAN
-            val connectGranted = ContextCompat.checkSelfPermission(
-                context, 
-                android.Manifest.permission.BLUETOOTH_CONNECT
-            ) == PackageManager.PERMISSION_GRANTED
-            val scanGranted = ContextCompat.checkSelfPermission(
-                context, 
-                android.Manifest.permission.BLUETOOTH_SCAN
-            ) == PackageManager.PERMISSION_GRANTED
-            connectGranted && scanGranted
-        } else {
-            // Android 11 and below - Bluetooth permissions are granted at install time
-            true
-        }
-    }
-    
     private var facade: CatalystFacade? = null
     private var tenantId: String = ""
     private var deviceId: String = ""
@@ -581,44 +561,15 @@ class CatalystClient(
                 /* ---------------- Step 5: Read Connection Config from Config File ---------------- */
                 // Read connection configuration from config file (matching MainModel.java line 596)
                 val connectionType = config.getProperty(CONFIG_KEY_CONNECTION_TYPE)
-                var deviceAddress = config.getProperty(CONFIG_KEY_DEVICE_ADDRESS)
+                val deviceAddress = config.getProperty(CONFIG_KEY_DEVICE_ADDRESS)
                 val devicePortNo = config.getProperty(CONFIG_KEY_DEVICE_PORT_NO)
                 
                 LogCapture.log(Log.INFO, TAG, "Connection config from file: Type=$connectionType, Address=$deviceAddress, Port=$devicePortNo")
                 
-                // If Bluetooth connection type and device address is empty, try to get from saved address or resolve from saved device name
-                if (connectionType == "Bluetooth" && deviceAddress.isNullOrBlank()) {
-                    LogCapture.log(Log.INFO, TAG, "DeviceAddress is empty, attempting to get from saved address or resolve from device name...")
-                    try {
-                        // First, try to get directly saved address (from Settings save button)
-                        var resolvedAddress = com.hirenq.tmmrelay.util.BluetoothUtil.getDeviceAddress(context)
-                        if (resolvedAddress == null) {
-                            // If no saved address, try to resolve from device name
-                            resolvedAddress = com.hirenq.tmmrelay.util.BluetoothUtil.getBluetoothAddressFromSavedName(context)
-                        }
-                        
-                        if (resolvedAddress != null) {
-                            deviceAddress = resolvedAddress
-                            LogCapture.log(Log.INFO, TAG, "✅ Resolved Bluetooth address: $deviceAddress")
-                            // Update config file with resolved address for future use
-                            config.setProperty(CONFIG_KEY_DEVICE_ADDRESS, deviceAddress)
-                            writeConfigToFile(config)
-                            LogCapture.log(Log.INFO, TAG, "Updated config file with resolved address")
-                        } else {
-                            LogCapture.log(Log.WARN, TAG, "⚠️ WARNING: Could not resolve Bluetooth address!")
-                            LogCapture.log(Log.WARN, TAG, "   Please go to Settings and enter the device name, or set DeviceAddress in config.properties")
-                            LogCapture.log(Log.WARN, TAG, "   Example: DeviceAddress=00:11:22:33:44:55")
-                        }
-                    } catch (e: Exception) {
-                        LogCapture.log(Log.ERROR, TAG, "Error resolving Bluetooth address: ${e.message}", e)
-                    }
-                }
-                
-                // Log warning if Bluetooth connection type but still no device address
-                if (connectionType == "Bluetooth" && deviceAddress.isNullOrBlank()) {
+                // Log warning if Bluetooth connection type but no device address
+                if (connectionType == "Bluetooth" && (deviceAddress.isNullOrBlank())) {
                     LogCapture.log(Log.WARN, TAG, "⚠️ WARNING: Bluetooth connection type specified but DeviceAddress is empty!")
                     LogCapture.log(Log.WARN, TAG, "   For TrimbleGNSS/SpectraPrecision drivers, you need to set DeviceAddress in config.properties")
-                    LogCapture.log(Log.WARN, TAG, "   Or go to Settings and enter the device name")
                     LogCapture.log(Log.WARN, TAG, "   Example: DeviceAddress=00:11:22:33:44:55")
                 }
                 
@@ -702,31 +653,12 @@ class CatalystClient(
                 }
                 
                 if (retCode.code != DriverReturnCode.Success) {
-                    val errorMsg = "Connect failed: ${retCode.code} for driver: $driverType"
-                    LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
-                    LogCapture.log(Log.ERROR, TAG, "Driver type: $driverType")
-                    LogCapture.log(Log.ERROR, TAG, "Connection type: $connectionType")
-                    LogCapture.log(Log.ERROR, TAG, "Device address: $deviceAddress")
-                    LogCapture.log(Log.ERROR, TAG, "Return code: ${retCode.code}")
-                    
-                    // Provide specific troubleshooting for Bluetooth connections
-                    if (connectionType == "Bluetooth") {
-                        LogCapture.log(Log.ERROR, TAG, "Bluetooth connection troubleshooting:")
-                        LogCapture.log(Log.ERROR, TAG, "  1. Ensure Bluetooth is enabled on device")
-                        LogCapture.log(Log.ERROR, TAG, "  2. Verify BLUETOOTH_CONNECT and BLUETOOTH_SCAN permissions are granted")
-                        LogCapture.log(Log.ERROR, TAG, "  3. Check DeviceAddress is correct MAC address format (e.g., 00:11:22:33:44:55)")
-                        LogCapture.log(Log.ERROR, TAG, "  4. Ensure DA2 receiver is powered on and in pairing mode")
-                        LogCapture.log(Log.ERROR, TAG, "  5. Try pairing the device manually in Android Bluetooth settings first")
-                    }
-                    
+                    LogCapture.log(Log.ERROR, TAG, "❌ Connect failed: ${retCode.code}")
                     currentError = "CONNECT_FAILED"
-                    onError(RuntimeException(errorMsg))
+                    onError(RuntimeException("Connect failed: ${retCode.code}"))
                     return@Thread
                 } else {
                     LogCapture.log(Log.INFO, TAG, "✅ Connect success: $driverType")
-                    if (connectionType == "Bluetooth") {
-                        LogCapture.log(Log.INFO, TAG, "   Connected to Bluetooth device: $deviceAddress")
-                    }
                 }
 
                 /* 🔴 REQUIRED IN 2025.12.5 — ADD LISTENER IMMEDIATELY */
@@ -810,7 +742,7 @@ class CatalystClient(
     
    private fun waitForLicense(
     facade: CatalystFacade,
-    timeoutMs: Long = 1200000,   // 🔴 increased
+    timeoutMs: Long = 12000,   // 🔴 increased
     intervalMs: Long = 1000
 ): Boolean {
 
