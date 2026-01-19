@@ -745,15 +745,7 @@ class CatalystClient(
 
                 /* ---------------- Step 9: Check Sensor Properties and Start Survey if Licensed ---------------- */
                 // Check if sensor is licensed before starting survey
-                if (retCode.getCode() == DriverReturnCode.Success) {
-                    LogCapture.log(Log.INFO, TAG, "Checking sensor properties and license status...")
-                    val sensorPropsRc = facade!!.getSensorProperties()
-                    if (sensorPropsRc.code == DriverReturnCode.Success) {
-                        val sensorProperties = sensorPropsRc.returnedObject
-                        if (sensorProperties.isLicensed()) {
-                            LogCapture.log(Log.INFO, TAG, "✅ Sensor is licensed - starting Trimble Correction Hub Survey")
-                            LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
-                            
+                if (retCode.getCode() == DriverReturnCode.Success) {                    
                             // Start Trimble Correction Hub Survey (matching demo MainModel.java line 864)
                             val surveyRc = facade!!.startTrimbleCorrectionHubSurvey(TargetReferenceFrame.UseLocalSettings)
                             if (surveyRc.code == DriverReturnCode.Success) {
@@ -761,12 +753,8 @@ class CatalystClient(
                             } else {
                                 LogCapture.log(Log.WARN, TAG, "⚠️ Start Trimble Correction Hub Survey returned: ${surveyRc.code}")
                             }
-                        } else {
-                            LogCapture.log(Log.WARN, TAG, "⚠️ Sensor is not licensed - skipping survey start")
-                        }
-                    } else {
-                        LogCapture.log(Log.WARN, TAG, "⚠️ Get sensor properties failed: ${sensorPropsRc.code} - skipping survey start")
-                    }
+                        } 
+                    } 
                 }
 
                 sdkConnected = true
