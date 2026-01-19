@@ -142,12 +142,20 @@ class MainActivity : ComponentActivity() {
             val isConnected = intent.getBooleanExtra("isConnected", false)
             val error = intent.getStringExtra("error")
             
-            // Get GNSS coordinates
+            // Get DA2 coordinates (TRIMBLE)
             val latitude = if (intent.hasExtra("latitude")) {
                 intent.getDoubleExtra("latitude", 0.0)
             } else 0.0
             val longitude = if (intent.hasExtra("longitude")) {
                 intent.getDoubleExtra("longitude", 0.0)
+            } else 0.0
+            
+            // Get mobile GPS coordinates
+            val mobileLatitude = if (intent.hasExtra("mobileLatitude")) {
+                intent.getDoubleExtra("mobileLatitude", 0.0)
+            } else 0.0
+            val mobileLongitude = if (intent.hasExtra("mobileLongitude")) {
+                intent.getDoubleExtra("mobileLongitude", 0.0)
             } else 0.0
             
             // Get data source
@@ -162,6 +170,8 @@ class MainActivity : ComponentActivity() {
                 error,
                 latitude,
                 longitude,
+                mobileLatitude,
+                mobileLongitude,
                 dataSource
             )
         }
@@ -511,6 +521,8 @@ class MainActivity : ComponentActivity() {
         error: String?,
         latitude: Double = 0.0,
         longitude: Double = 0.0,
+        mobileLatitude: Double = 0.0,
+        mobileLongitude: Double = 0.0,
         dataSource: String = "N/A"
     ) {
         val locationGranted =
@@ -546,13 +558,52 @@ class MainActivity : ComponentActivity() {
             append("V ${vAcc.takeIf { it > 0 } ?: "N/A"} m\n\n")
             
             // Display GNSS coordinates with data source
-            if (latitude != 0.0 || longitude != 0.0) {
-                append("GNSS Position (Source: $dataSource):\n")
-                append("Lat: ${String.format("%.8f", latitude)}\n")
-                append("Lng: ${String.format("%.8f", longitude)}")
+            // Show TRIMBLE coordinates if dataSource is TRIMBLE, otherwise show MOBILE_GPS coordinates
+            val displayLat: Double
+            val displayLon: Double
+            val displaySource: String
+            
+            when (dataSource.uppercase()) {
+                "TRIMBLE", "DA2" -> {
+                    displayLat = latitude
+                    displayLon = longitude
+                    displaySource = "TRIMBLE"
+                }
+                "MOBILE_GPS" -> {
+                    displayLat = mobileLatitude
+                    displayLon = mobileLongitude
+                    displaySource = "MOBILE_GPS"
+                }
+                else -> {
+                    // Fallback: use whichever has valid coordinates
+                    if (latitude != 0.0 || longitude != 0.0) {
+                        displayLat = latitude
+                        displayLon = longitude
+                        displaySource = "TRIMBLE"
+                    } else if (mobileLatitude != 0.0 || mobileLongitude != 0.0) {
+                        displayLat = mobileLatitude
+                        displayLon = mobileLongitude
+                        displaySource = "MOBILE_GPS"
+                    } else {
+                        displayLat = 0.0
+                        displayLon = 0.0
+                        displaySource = "N/A"
+                    }
+                }
+            }
+            
+            if (displayLat != 0.0 || displayLon != 0.0) {
+                append("GNSS Position (Source: $displaySource):\n")
+                append("Lat: ${String.format("%.8f", displayLat)}\n")
+                append("Lng: ${String.format("%.8f", displayLon)}")
+            } else if (isConnected) {
+                // If connected but no coordinates yet, show fix status
+                append("GNSS Position:\n")
+                append("Connected - Waiting for fix...\n")
+                append("FixType: $fixType")
             } else {
                 append("GNSS Position:\n")
-                append("Waiting for fix...")
+                append("Waiting for connection...")
             }
         }
 

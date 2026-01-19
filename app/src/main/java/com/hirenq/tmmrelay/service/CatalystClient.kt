@@ -208,6 +208,48 @@ class CatalystClient(
         }
     }
     
+    // Start positioning explicitly (matching CatalystFacade.java subscribe() method lines 809-813)
+    private fun startPositioning() {
+        try {
+            // Use reflection to access the internal sensor object from CatalystFacade
+            // This ensures positioning is started even if internal subscribe() wasn't called
+            val facadeClass = facade?.javaClass
+            val sensorField = facadeClass?.getDeclaredField("sensor")
+            sensorField?.isAccessible = true
+            val sensor = sensorField?.get(facade)
+            
+            if (sensor == null) {
+                LogCapture.log(Log.WARN, TAG, "Sensor is null - positioning may already be started by CatalystFacade")
+                return
+            }
+            
+            // Get ISsiPositioning interface (matching CatalystFacade.java line 809)
+            val getInterfaceMethod = sensor.javaClass.getMethod("getInterface", Class.forName("trimble.jssi.interfaces.SsiInterfaceType"))
+            val ssiPositioningType = Class.forName("trimble.jssi.interfaces.SsiInterfaceType")
+            val positioningTypeEnum = ssiPositioningType.getField("SsiPositioning").get(null)
+            
+            val ssiPositioning = getInterfaceMethod.invoke(sensor, positioningTypeEnum)
+            
+            if (ssiPositioning != null) {
+                // Create PositioningSettings (matching CatalystFacade.java line 812)
+                val positioningSettingsClass = Class.forName("trimble.jssi.interfaces.gnss.positioning.PositioningSettings")
+                val positioningSettings = positioningSettingsClass.getDeclaredConstructor().newInstance()
+                
+                // Start positioning (matching CatalystFacade.java line 812)
+                val startPositioningMethod = ssiPositioning.javaClass.getMethod("startPositioning", positioningSettingsClass)
+                startPositioningMethod.invoke(ssiPositioning, positioningSettings)
+                
+                LogCapture.log(Log.INFO, TAG, "✅ Positioning started successfully via reflection")
+            } else {
+                LogCapture.log(Log.WARN, TAG, "ISsiPositioning interface not available - positioning may already be started")
+            }
+        } catch (e: Exception) {
+            // If reflection fails, positioning may already be started by CatalystFacade internally
+            LogCapture.log(Log.WARN, TAG, "Could not start positioning via reflection (may already be started): ${e.message}")
+            LogCapture.log(Log.DEBUG, TAG, "Positioning should be started automatically by CatalystFacade after connection")
+        }
+    }
+    
     // Set reduced antenna height from config (matching MainModel.java setReducedAntennaHeight() lines 678-693)
     private fun setReducedAntennaHeight() {
         try {
@@ -320,7 +362,9 @@ class CatalystClient(
                     null 
                 }
                 
-                Log.d(TAG, "Position: lat=$latDegrees, lon=$lonDegrees, acc=$hPrec, fix=$solution")
+                Log.i(TAG, "Position update received: lat=$latDegrees, lon=$lonDegrees, acc=$hPrec, fix=$solution")
+                // Always call createAndSendTelemetry even if coordinates are 0.0 initially
+                // This ensures diagnostics are broadcast and UI is updated
                 createAndSendTelemetry()
             } catch (e: Exception) {
                 Log.e(TAG, "Error in onPositionUpdate: ${e.message}", e)
@@ -741,6 +785,10 @@ class CatalystClient(
                     LogCapture.log(Log.INFO, TAG, "✅ Set output position rate success")
                 }
 
+                /* ---------------- Step 9: Start Positioning (matching CatalystFacade.java lines 809-813) ---------------- */
+                // Explicitly start positioning to ensure we receive position updates
+                startPositioning()
+
                 sdkConnected = true
                 LogCapture.log(Log.INFO, TAG, "=== Catalyst SDK connected successfully ===")
 
@@ -828,12 +876,19 @@ class CatalystClient(
             // Get DA2 receiver battery (nullable)
             val da2Battery = try { latestBattery?.getBatteryLevel() } catch (e: Exception) { null }?.takeIf { it in 0..100 }
             
+            // Use coordinates even if they're 0.0 initially - they may become valid on subsequent updates
+            // Only filter out NaN and Infinite values
+            val validLat = if (!latDegrees.isNaN() && !latDegrees.isInfinite()) latDegrees else 0.0
+            val validLon = if (!lonDegrees.isNaN() && !lonDegrees.isInfinite()) lonDegrees else 0.0
+            
+            Log.d(TAG, "Creating telemetry payload: lat=$validLat, lon=$validLon, fixType=$fixTypeName")
+            
             val payload = TelemetryPayload(
                 tenantId = tenantId,
                 // DA2 receiver data (nullable) - fields 5-17
                 deviceId = null, // DA2 receiver device ID (not available yet, can be set later if needed)
-                latitude = if (latDegrees != 0.0 && !latDegrees.isNaN() && !latDegrees.isInfinite()) latDegrees else 0.0, // DA2 coordinates
-                longitude = if (lonDegrees != 0.0 && !lonDegrees.isNaN() && !lonDegrees.isInfinite()) lonDegrees else 0.0, // DA2 coordinates
+                latitude = validLat, // DA2 coordinates (may be 0.0 initially)
+                longitude = validLon, // DA2 coordinates (may be 0.0 initially)
                 battery = da2Battery, // DA2 receiver battery
                 fixType = fixTypeName, // DA2 fix type
                 timestamp = Instant.now().toString(), // DA2 timestamp

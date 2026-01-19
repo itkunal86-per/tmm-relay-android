@@ -152,12 +152,17 @@ class TmmRelayService : Service() {
             putExtra("latitude", gnssLatitude)
             putExtra("longitude", gnssLongitude)
             
+            // Add mobile GPS coordinates
+            putExtra("mobileLatitude", payload.mobileLatitude ?: 0.0)
+            putExtra("mobileLongitude", payload.mobileLongitude ?: 0.0)
+            
             // Add data source: Determine if coordinates are from DA2 or Mobile GPS
-            val dataSource: String = if ((gnssLatitude != null && gnssLatitude != 0.0) || (gnssLongitude != null && gnssLongitude != 0.0)) {
-                "DA2" // DA2 (Trimble) coordinates
+            // Use payload.dataSource if available, otherwise determine from coordinates
+            val dataSource: String = payload.dataSource ?: if (gnssLatitude != 0.0 || gnssLongitude != 0.0) {
+                "TRIMBLE" // DA2 (Trimble) coordinates
             } else if ((payload.mobileLatitude != null && payload.mobileLatitude != 0.0) || 
                        (payload.mobileLongitude != null && payload.mobileLongitude != 0.0)) {
-                "Mobile GPS" // Mobile GPS coordinates
+                "MOBILE_GPS" // Mobile GPS coordinates
             } else {
                 "N/A" // No coordinates available
             }
@@ -218,6 +223,7 @@ class TmmRelayService : Service() {
                 // Broadcast diagnostics periodically even if no messages received
                 // Separate DA2 and mobile GPS coordinates properly
                 val isTrimbleConnected = catalystClient?.getConnectionStatus() ?: false
+                android.util.Log.d("TmmRelayService", "Diagnostics update check: isTrimbleConnected=$isTrimbleConnected")
                 
                 // DA2 coordinates (latitude/longitude) - only from DA2, defaults to 0.0 if not available
                 val da2Latitude: Double = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
