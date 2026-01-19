@@ -716,7 +716,8 @@ class CatalystClient(
                 //config.getProperty(CONFIG_KEY_DEVICE_ADDRESS)
                 val devicePortNo = config.getProperty(CONFIG_KEY_DEVICE_PORT_NO)
                 
-           
+                LogCapture.log(Log.INFO, TAG, "Adding event listener (early)...")
+                facade!!.addCatalystEventListener(eventListener)
                 /* ---------------- Step 6: Connect ---------------- */
                 LogCapture.log(Log.INFO, TAG, "Connecting to sensor using driver: $driverType...")
                 var retCode: ReturnCode = ReturnCode(DriverReturnCode.Error)
@@ -766,7 +767,8 @@ class CatalystClient(
                                 
                                 LogCapture.log(Log.INFO, TAG, "Connecting via Bluetooth to address: $deviceAddress")
                                 LogCapture.log(Log.DEBUG, TAG, "Driver type: $driverType, Bluetooth address: $deviceAddress")
-                                facade!!.connectViaBluetooth(deviceAddress)
+                                //facade!!.connectViaBluetooth(deviceAddress)
+                                facade.start()
                             }
                             "TcpIp" -> {
                                 // TcpIp is only valid for TrimbleGNSS (validated in validateConnectionConfig)
@@ -799,8 +801,8 @@ class CatalystClient(
                
 
                 /* 🔴 REQUIRED IN 2025.12.5 — ADD LISTENER IMMEDIATELY */
-                LogCapture.log(Log.INFO, TAG, "Adding event listener (early)...")
-                facade!!.addCatalystEventListener(eventListener)
+               // LogCapture.log(Log.INFO, TAG, "Adding event listener (early)...")
+               // facade!!.addCatalystEventListener(eventListener)
 
                 /* Give IPC a moment */
                 Thread.sleep(300)
