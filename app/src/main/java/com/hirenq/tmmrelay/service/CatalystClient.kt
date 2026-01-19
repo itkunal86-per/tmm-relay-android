@@ -277,7 +277,42 @@ class CatalystClient(
         }
     }
     
-   
+    /**
+     * Get the latest position update if available
+     * This returns the most recent position received through the event listener
+     * @return PositionUpdate or null if no position has been received yet
+     */
+    fun getLatestPosition(): PositionUpdate? {
+        return latestPosition
+    }
+    
+    /**
+     * Try to get current position immediately after SDK starts
+     * This will check if a position is already available, or wait briefly for the first position update
+     */
+    fun tryGetCurrentPosition(maxWaitMs: Long = 2000): PositionUpdate? {
+        // If we already have a position, return it immediately
+        latestPosition?.let {
+            LogCapture.log(Log.INFO, TAG, "Current position already available")
+            return it
+        }
+        
+        // Otherwise, wait briefly for the first position update
+        LogCapture.log(Log.INFO, TAG, "Waiting up to ${maxWaitMs}ms for first position update...")
+        val startTime = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startTime < maxWaitMs) {
+            latestPosition?.let {
+                LogCapture.log(Log.INFO, TAG, "Position received after ${System.currentTimeMillis() - startTime}ms")
+                return it
+            }
+            Thread.sleep(100) // Check every 100ms
+        }
+        
+        LogCapture.log(Log.WARN, TAG, "No position received within ${maxWaitMs}ms timeout")
+        return null
+    }
+    
+    
     
     // Track latest values from different event types
     private var latestPosition: PositionUpdate? = null
@@ -747,9 +782,23 @@ class CatalystClient(
                 // Check if sensor is licensed before starting survey
                 if (retCode.getCode() == DriverReturnCode.Success) {
                     // Start Trimble Correction Hub Survey (matching demo MainModel.java line 864)
-                    val surveyRc = facade!!.startTrimbleCorrectionHubSurvey(TargetReferenceFrame.UseLocalSettings)
+                    val surveyRc = facade!!.startTrimbleCorrectionHubSurvey(trimble.jssi.android.catalystfacade.TargetReferenceFrame.UseLocalSettings)
                     if (surveyRc.code == DriverReturnCode.Success) {
                         LogCapture.log(Log.INFO, TAG, "✅ Trimble Correction Hub Survey started successfully")
+                        
+                        // Try to get position immediately after survey starts
+                        // Position updates will come through the event listener, but we can check if one is already available
+                        LogCapture.log(Log.INFO, TAG, "Waiting briefly for first position update...")
+                        Thread.sleep(500) // Give positioning a moment to start
+                        
+                        // Check if we have a position available
+                        latestPosition?.let { position ->
+                            LogCapture.log(Log.INFO, TAG, "Position available immediately after survey start")
+                            // Create and send telemetry with the current position
+                            createAndSendTelemetry()
+                        } ?: run {
+                            LogCapture.log(Log.INFO, TAG, "Position not yet available - will be received via event listener")
+                        }
                     } else {
                         LogCapture.log(Log.WARN, TAG, "⚠️ Start Trimble Correction Hub Survey returned: ${surveyRc.code}")
                     }
