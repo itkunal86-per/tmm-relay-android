@@ -745,16 +745,14 @@ class CatalystClient(
 
                 /* ---------------- Step 9: Check Sensor Properties and Start Survey if Licensed ---------------- */
                 // Check if sensor is licensed before starting survey
-                if (retCode.getCode() == DriverReturnCode.Success) {                    
-                            // Start Trimble Correction Hub Survey (matching demo MainModel.java line 864)
-                            val surveyRc = facade!!.startTrimbleCorrectionHubSurvey(TargetReferenceFrame.UseLocalSettings)
-                            if (surveyRc.code == DriverReturnCode.Success) {
-                                LogCapture.log(Log.INFO, TAG, "✅ Trimble Correction Hub Survey started successfully")
-                            } else {
-                                LogCapture.log(Log.WARN, TAG, "⚠️ Start Trimble Correction Hub Survey returned: ${surveyRc.code}")
-                            }
-                        } 
-                    } 
+                if (retCode.getCode() == DriverReturnCode.Success) {
+                    // Start Trimble Correction Hub Survey (matching demo MainModel.java line 864)
+                    val surveyRc = facade!!.startTrimbleCorrectionHubSurvey(TargetReferenceFrame.UseLocalSettings)
+                    if (surveyRc.code == DriverReturnCode.Success) {
+                        LogCapture.log(Log.INFO, TAG, "✅ Trimble Correction Hub Survey started successfully")
+                    } else {
+                        LogCapture.log(Log.WARN, TAG, "⚠️ Start Trimble Correction Hub Survey returned: ${surveyRc.code}")
+                    }
                 }
 
                 sdkConnected = true
