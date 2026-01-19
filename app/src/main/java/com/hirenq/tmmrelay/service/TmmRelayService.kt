@@ -131,27 +131,26 @@ class TmmRelayService : Service() {
             putExtra("isConnected", isConnected)
             
             // GNSS coordinates: Use DA2 coordinates from payload if available, otherwise use lastKnown (which is from DA2)
-            // latitude/longitude in payload are always from DA2 (nullable)
+            // latitude/longitude in payload are always from DA2 (defaults to 0.0 if not available)
             // mobileLatitude/mobileLongitude in payload are always from mobile GPS (nullable)
-            val gnssLatitude: Double? = if (isConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+            val gnssLatitude: Double = if (isConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
                 // DA2 is connected and we have DA2 coordinates - use them
                 lastKnownLatitude
             } else {
-                // Use payload latitude (which is from DA2 if available, otherwise null)
+                // Use payload latitude (which is from DA2 if available, otherwise 0.0)
                 payload.latitude
             }
-            val gnssLongitude: Double? = if (isConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+            val gnssLongitude: Double = if (isConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
                 // DA2 is connected and we have DA2 coordinates - use them
                 lastKnownLongitude
             } else {
-                // Use payload longitude (which is from DA2 if available, otherwise null)
+                // Use payload longitude (which is from DA2 if available, otherwise 0.0)
                 payload.longitude
             }
             
-            // Add GNSS coordinates (DA2 coordinates - nullable)
-            // Use 0.0 for extras since Intent extras don't support nullable Double, but we'll check in UI
-            putExtra("latitude", gnssLatitude ?: 0.0)
-            putExtra("longitude", gnssLongitude ?: 0.0)
+            // Add GNSS coordinates (DA2 coordinates - defaults to 0.0 if not available)
+            putExtra("latitude", gnssLatitude)
+            putExtra("longitude", gnssLongitude)
             
             // Add data source: Determine if coordinates are from DA2 or Mobile GPS
             val dataSource: String = if ((gnssLatitude != null && gnssLatitude != 0.0) || (gnssLongitude != null && gnssLongitude != 0.0)) {
@@ -220,7 +219,7 @@ class TmmRelayService : Service() {
                 // Separate DA2 and mobile GPS coordinates properly
                 val isTrimbleConnected = catalystClient?.getConnectionStatus() ?: false
                 
-                // DA2 coordinates (latitude/longitude) - only from DA2, nullable
+                // DA2 coordinates (latitude/longitude) - only from DA2, defaults to 0.0 if not available
                 val da2Latitude: Double? = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
                     lastKnownLatitude
                 } else {
@@ -276,8 +275,8 @@ class TmmRelayService : Service() {
                     fixType = if (isTrimbleConnected && lastKnownFixType != "UNKNOWN") lastKnownFixType else null, // DA2 fix type
                     timestamp = if (isTrimbleConnected) Instant.now().toString() else null, // DA2 timestamp
                     health = if (isTrimbleConnected) "OK" else if (mobileGpsLatitude != null || mobileGpsLongitude != null) "MOBILE_GPS_ONLY" else "OK",
-                    horizontalAccuracy = if (accuracy >= 0) accuracy else null, // DA2 horizontal accuracy
-                    verticalAccuracy = null, // DA2 vertical accuracy (not available)
+                    horizontalAccuracy = if (accuracy >= 0) accuracy else 0.0, // DA2 horizontal accuracy
+                    verticalAccuracy = 0.0, // DA2 vertical accuracy (not available)
                     satellites = null, // DA2 satellites (not available in diagnostics)
                     userId = null, // DA2 user data
                     userName = null, // DA2 user data
@@ -319,10 +318,9 @@ class TmmRelayService : Service() {
             lastMessageAt = Instant.now()
 
             // Update lastKnown DA2 coordinates only if payload has DA2 coordinates (latitude/longitude are from DA2)
-            if ((payload.latitude != null && payload.latitude != 0.0) || 
-                (payload.longitude != null && payload.longitude != 0.0)) {
-                lastKnownLatitude = payload.latitude ?: 0.0
-                lastKnownLongitude = payload.longitude ?: 0.0
+            if (payload.latitude != 0.0 || payload.longitude != 0.0) {
+                lastKnownLatitude = payload.latitude
+                lastKnownLongitude = payload.longitude
                 lastKnownFixType = payload.fixType ?: "UNKNOWN"
             }
 
@@ -440,14 +438,14 @@ class TmmRelayService : Service() {
             tenantId = tenantId,
             // DA2 receiver data (nullable) - fields 5-17
             deviceId = null, // DA2 receiver device ID (not available initially)
-            latitude = null,  // DA2 coordinates - null initially
-            longitude = null,  // DA2 coordinates - null initially
+            latitude = 0.0,  // DA2 coordinates - 0.0 initially
+            longitude = 0.0,  // DA2 coordinates - 0.0 initially
             battery = null, // DA2 receiver battery - null initially
             fixType = null, // DA2 fix type - null initially
             timestamp = null, // DA2 timestamp - null initially
             health = null, // DA2 health - null initially
-            horizontalAccuracy = null, // DA2 horizontal accuracy - null initially
-            verticalAccuracy = null, // DA2 vertical accuracy - null initially
+            horizontalAccuracy = 0.0, // DA2 horizontal accuracy - 0.0 initially
+            verticalAccuracy = 0.0, // DA2 vertical accuracy - 0.0 initially
             satellites = null, // DA2 satellites - null initially
             userId = null, // DA2 user data
             userName = null, // DA2 user data
@@ -516,14 +514,14 @@ class TmmRelayService : Service() {
             tenantId = tenantId,
             // DA2 receiver data (nullable) - fields 5-17
             deviceId = null, // DA2 receiver device ID (not available)
-            latitude = if (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0) lastKnownLatitude else null,  // DA2 coordinates only
-            longitude = if (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0) lastKnownLongitude else null,  // DA2 coordinates only
+            latitude = if (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0) lastKnownLatitude else 0.0,  // DA2 coordinates only
+            longitude = if (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0) lastKnownLongitude else 0.0,  // DA2 coordinates only
             battery = null, // DA2 receiver battery (not available)
             fixType = null, // DA2 fix type (not available when offline)
             timestamp = null, // DA2 timestamp (not available when offline)
             health = "OFFLINE", // DA2 health
-            horizontalAccuracy = null, // DA2 horizontal accuracy (not available)
-            verticalAccuracy = null, // DA2 vertical accuracy (not available)
+            horizontalAccuracy = 0.0, // DA2 horizontal accuracy (not available)
+            verticalAccuracy = 0.0, // DA2 vertical accuracy (not available)
             satellites = null, // DA2 satellites (not available)
             userId = null, // DA2 user data
             userName = null, // DA2 user data
@@ -554,14 +552,14 @@ class TmmRelayService : Service() {
             tenantId = tenantId,
             // DA2 receiver data (nullable) - fields 5-17
             deviceId = null, // DA2 receiver device ID (not available)
-            latitude = if (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0) lastKnownLatitude else null,  // DA2 coordinates only
-            longitude = if (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0) lastKnownLongitude else null,  // DA2 coordinates only
+            latitude = if (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0) lastKnownLatitude else 0.0,  // DA2 coordinates only
+            longitude = if (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0) lastKnownLongitude else 0.0,  // DA2 coordinates only
             battery = null, // DA2 receiver battery (not available in periodic post)
             fixType = if (isTrimbleConnected && lastKnownFixType != "UNKNOWN") lastKnownFixType else null, // DA2 fix type
             timestamp = if (isTrimbleConnected) Instant.now().toString() else null, // DA2 timestamp
             health = if (isTrimbleConnected) "OK" else null, // DA2 health
-            horizontalAccuracy = null, // DA2 horizontal accuracy (not available)
-            verticalAccuracy = null, // DA2 vertical accuracy (not available)
+            horizontalAccuracy = 0.0, // DA2 horizontal accuracy (not available)
+            verticalAccuracy = 0.0, // DA2 vertical accuracy (not available)
             satellites = null, // DA2 satellites (not available)
             userId = null, // DA2 user data
             userName = null, // DA2 user data
@@ -594,20 +592,20 @@ class TmmRelayService : Service() {
         val mobileBattery = DeviceInfoUtil.batteryLevel(this)
         val dataSource = "MOBILE_GPS"
         
-        // DA2 coordinates (latitude/longitude) - nullable, only from DA2 if available
+        // DA2 coordinates (latitude/longitude) - defaults to 0.0 if not available, only from DA2 if available
         // Mobile GPS coordinates (mobileLatitude/mobileLongitude) - always included
         val payload = TelemetryPayload(
             tenantId = tenantId,
             // DA2 receiver data (nullable) - fields 5-17
             deviceId = null, // DA2 receiver device ID (not available)
-            latitude = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) lastKnownLatitude else null,  // DA2 coordinates only
-            longitude = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) lastKnownLongitude else null,  // DA2 coordinates only
+            latitude = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) lastKnownLatitude else 0.0,  // DA2 coordinates only
+            longitude = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) lastKnownLongitude else 0.0,  // DA2 coordinates only
             battery = null, // DA2 receiver battery (not available)
             fixType = null, // DA2 fix type (not available when using mobile GPS)
             timestamp = null, // DA2 timestamp (not available when using mobile GPS)
             health = null, // DA2 health (not available when using mobile GPS)
-            horizontalAccuracy = null, // DA2 horizontal accuracy (not available)
-            verticalAccuracy = null, // DA2 vertical accuracy (not available)
+            horizontalAccuracy = 0.0, // DA2 horizontal accuracy (not available)
+            verticalAccuracy = 0.0, // DA2 vertical accuracy (not available)
             satellites = null, // DA2 satellites (not available)
             userId = null, // DA2 user data
             userName = null, // DA2 user data

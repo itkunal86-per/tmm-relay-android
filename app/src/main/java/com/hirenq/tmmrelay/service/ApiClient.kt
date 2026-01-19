@@ -58,15 +58,15 @@ object ApiClient {
             
             // DA2 receiver data (fields 5-17) - nullable, only from DA2 if available
             put("DeviceId", payload.deviceId ?: JSONObject.NULL) // DA2 receiver device ID
-            put("Latitude", payload.latitude ?: JSONObject.NULL) // DA2 coordinates
-            put("Longitude", payload.longitude ?: JSONObject.NULL) // DA2 coordinates
+            put("Latitude", if (payload.latitude != 0.0) payload.latitude else JSONObject.NULL) // DA2 coordinates
+            put("Longitude", if (payload.longitude != 0.0) payload.longitude else JSONObject.NULL) // DA2 coordinates
             put("Battery", payload.battery ?: JSONObject.NULL) // DA2 receiver battery
             put("FixType", payload.fixType ?: JSONObject.NULL) // DA2 fix type
             put("Timestamp", timestamp) // DA2 timestamp (processed above) or current timestamp
             put("CurrentTimestamp", currentTimestamp)
             put("Health", payload.health ?: JSONObject.NULL) // DA2 health
-            put("HorizontalAccuracy", payload.horizontalAccuracy ?: JSONObject.NULL) // DA2 horizontal accuracy
-            put("VerticalAccuracy", payload.verticalAccuracy ?: JSONObject.NULL) // DA2 vertical accuracy
+            put("HorizontalAccuracy", if (payload.horizontalAccuracy != 0.0) payload.horizontalAccuracy else JSONObject.NULL) // DA2 horizontal accuracy
+            put("VerticalAccuracy", if (payload.verticalAccuracy != 0.0) payload.verticalAccuracy else JSONObject.NULL) // DA2 vertical accuracy
             put("Satellites", payload.satellites ?: JSONObject.NULL) // DA2 satellites
             
             // Optional user details - always include

@@ -831,14 +831,14 @@ class CatalystClient(
                 tenantId = tenantId,
                 // DA2 receiver data (nullable) - fields 5-17
                 deviceId = null, // DA2 receiver device ID (not available yet, can be set later if needed)
-                latitude = latDegrees.takeIf { it != 0.0 && !it.isNaN() && !it.isInfinite() }, // DA2 coordinates
-                longitude = lonDegrees.takeIf { it != 0.0 && !it.isNaN() && !it.isInfinite() }, // DA2 coordinates
+                latitude = if (latDegrees != 0.0 && !latDegrees.isNaN() && !latDegrees.isInfinite()) latDegrees else 0.0, // DA2 coordinates
+                longitude = if (lonDegrees != 0.0 && !lonDegrees.isNaN() && !lonDegrees.isInfinite()) lonDegrees else 0.0, // DA2 coordinates
                 battery = da2Battery, // DA2 receiver battery
                 fixType = fixTypeName, // DA2 fix type
                 timestamp = Instant.now().toString(), // DA2 timestamp
                 health = health, // DA2 health
-                horizontalAccuracy = hPrecision.takeIf { it >= 0 && !it.isNaN() && !it.isInfinite() }, // DA2 horizontal accuracy
-                verticalAccuracy = vPrecision.takeIf { it >= 0 && !it.isNaN() && !it.isInfinite() }, // DA2 vertical accuracy
+                horizontalAccuracy = if (hPrecision >= 0 && !hPrecision.isNaN() && !hPrecision.isInfinite()) hPrecision else 0.0, // DA2 horizontal accuracy
+                verticalAccuracy = if (vPrecision >= 0 && !vPrecision.isNaN() && !vPrecision.isInfinite()) vPrecision else 0.0, // DA2 vertical accuracy
                 satellites = if (latestSatellitesInView >= 0) latestSatellitesInView else null, // DA2 satellites
                 userId = null, // DA2 user data (not available)
                 userName = null, // DA2 user data (not available)

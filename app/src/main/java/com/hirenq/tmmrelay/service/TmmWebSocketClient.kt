@@ -83,11 +83,11 @@ class TmmWebSocketClient(
                         else -> "OK"
                     }
 
-                    // Convert coordinates: use non-zero values or null
-                    val da2Latitude = if (latitude != 0.0) latitude else null
-                    val da2Longitude = if (longitude != 0.0) longitude else null
-                    val da2HorizontalAccuracy = if (horizontalAccuracy >= 0) horizontalAccuracy else null
-                    val da2VerticalAccuracy = if (verticalAccuracy >= 0) verticalAccuracy else null
+                    // Convert coordinates: use non-zero values or 0.0
+                    val da2Latitude = if (latitude != 0.0) latitude else 0.0
+                    val da2Longitude = if (longitude != 0.0) longitude else 0.0
+                    val da2HorizontalAccuracy = if (horizontalAccuracy >= 0) horizontalAccuracy else 0.0
+                    val da2VerticalAccuracy = if (verticalAccuracy >= 0) verticalAccuracy else 0.0
                     val da2Satellites = if (satellites >= 0) satellites else null
                     
                     val payload = TelemetryPayload(

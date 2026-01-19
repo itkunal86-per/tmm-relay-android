@@ -7,14 +7,14 @@ data class TelemetryPayload(
     
     // DA2 receiver data (fields 5-17) - nullable, only from DA2 receiver if available
     val deviceId: String? = null, // DA2 receiver device ID - nullable
-    val latitude: Double? = null, // DA2 (Trimble receiver) latitude - nullable, only from DA2
-    val longitude: Double? = null, // DA2 (Trimble receiver) longitude - nullable, only from DA2
+    val latitude: Double = 0.0, // DA2 (Trimble receiver) latitude - defaults to 0.0 if not available
+    val longitude: Double = 0.0, // DA2 (Trimble receiver) longitude - defaults to 0.0 if not available
     val battery: Int? = null, // DA2 receiver battery - nullable
     val fixType: String? = null, // DA2 receiver fix type - nullable
     val timestamp: String? = null, // DA2 receiver timestamp - nullable
     val health: String? = null, // DA2 receiver health - nullable
-    val horizontalAccuracy: Double? = null, // DA2 receiver horizontal accuracy - nullable
-    val verticalAccuracy: Double? = null, // DA2 receiver vertical accuracy - nullable
+    val horizontalAccuracy: Double = 0.0, // DA2 receiver horizontal accuracy - defaults to 0.0 if not available
+    val verticalAccuracy: Double = 0.0, // DA2 receiver vertical accuracy - defaults to 0.0 if not available
     val satellites: Int? = null, // DA2 receiver satellites - nullable
     val userId: String? = null, // DA2 user ID - nullable
     val userName: String? = null, // DA2 user name - nullable
