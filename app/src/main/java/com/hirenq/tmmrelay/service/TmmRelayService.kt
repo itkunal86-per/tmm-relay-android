@@ -220,15 +220,15 @@ class TmmRelayService : Service() {
                 val isTrimbleConnected = catalystClient?.getConnectionStatus() ?: false
                 
                 // DA2 coordinates (latitude/longitude) - only from DA2, defaults to 0.0 if not available
-                val da2Latitude: Double? = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+                val da2Latitude: Double = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
                     lastKnownLatitude
                 } else {
-                    null
+                    0.0
                 }
-                val da2Longitude: Double? = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
+                val da2Longitude: Double = if (isTrimbleConnected && (lastKnownLatitude != 0.0 || lastKnownLongitude != 0.0)) {
                     lastKnownLongitude
                 } else {
-                    null
+                    0.0
                 }
                 
                 // Mobile GPS coordinates (mobileLatitude/mobileLongitude) - only from mobile, nullable
@@ -257,7 +257,7 @@ class TmmRelayService : Service() {
                 }
                 
                 val mobileBattery = DeviceInfoUtil.batteryLevel(this@TmmRelayService)
-                val dataSource = if (isTrimbleConnected && (da2Latitude != null || da2Longitude != null)) {
+                val dataSource = if (isTrimbleConnected && (da2Latitude != 0.0 || da2Longitude != 0.0)) {
                     "TRIMBLE"
                 } else if (mobileGpsLatitude != null || mobileGpsLongitude != null) {
                     "MOBILE_GPS"
