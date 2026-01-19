@@ -477,19 +477,59 @@ class TmmRelayService : Service() {
         // START_STICKY ensures service restarts if killed by system
         // Important for Android 10-16 and Samsung One UI compatibility
         
-        // Get userTID from intent if provided (e.g., after TMM Login)
-        val intentUserTID = intent?.getStringExtra("userTID")
-        if (intentUserTID != null && intentUserTID.isNotEmpty()) {
-            // Update SharedPreferences with new userTID
-            getSharedPreferences("TmmRelayPrefs", Context.MODE_PRIVATE)
-                .edit()
-                .putString("userTID", intentUserTID)
-                .apply()
-            android.util.Log.i("TmmRelayService", "Received userTID from intent: $intentUserTID")
-            
-            // If CatalystClient exists, restart connection with new userTID
-            // Note: This requires recreating CatalystClient since userTID is set at construction
-            // For now, service restart is required for userTID changes
+        // Handle different intent actions
+        when (intent?.action) {
+            ACTION_START_SURVEY -> {
+                // Start survey if Trimble is connected and licensed
+                android.util.Log.i("TmmRelayService", "Received START_SURVEY action")
+                Thread {
+                    try {
+                        val isConnected = catalystClient?.getConnectionStatus() ?: false
+                        if (isConnected) {
+                            android.util.Log.i("TmmRelayService", "Trimble is connected - starting survey...")
+                            val surveyRc = catalystClient?.startSurvey()
+                            if (surveyRc?.code == trimble.jssi.android.catalystfacade.DriverReturnCode.Success) {
+                                android.util.Log.i("TmmRelayService", "✅ Survey started successfully")
+                                // Broadcast success
+                                val surveyIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                    putExtra("surveyStatus", "Survey Started")
+                                }
+                                LocalBroadcastManager.getInstance(this).sendBroadcast(surveyIntent)
+                            } else {
+                                android.util.Log.w("TmmRelayService", "⚠️ Survey start failed: ${surveyRc?.code}")
+                                val surveyIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                    putExtra("surveyStatus", "Survey Start Failed: ${surveyRc?.code}")
+                                }
+                                LocalBroadcastManager.getInstance(this).sendBroadcast(surveyIntent)
+                            }
+                        } else {
+                            android.util.Log.w("TmmRelayService", "Cannot start survey - Trimble not connected")
+                            val surveyIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                putExtra("surveyStatus", "Cannot start survey - Trimble not connected")
+                            }
+                            LocalBroadcastManager.getInstance(this).sendBroadcast(surveyIntent)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("TmmRelayService", "Error starting survey: ${e.message}", e)
+                    }
+                }.start()
+            }
+            else -> {
+                // Get userTID from intent if provided (e.g., after TMM Login)
+                val intentUserTID = intent?.getStringExtra("userTID")
+                if (intentUserTID != null && intentUserTID.isNotEmpty()) {
+                    // Update SharedPreferences with new userTID
+                    getSharedPreferences("TmmRelayPrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("userTID", intentUserTID)
+                        .apply()
+                    android.util.Log.i("TmmRelayService", "Received userTID from intent: $intentUserTID")
+                    
+                    // If CatalystClient exists, restart connection with new userTID
+                    // Note: This requires recreating CatalystClient since userTID is set at construction
+                    // For now, service restart is required for userTID changes
+                }
+            }
         }
         
         return START_STICKY
@@ -726,6 +766,8 @@ class TmmRelayService : Service() {
 
         const val ACTION_DIAGNOSTICS_UPDATE =
             "com.hirenq.tmmrelay.DIAGNOSTICS_UPDATE"
+        const val ACTION_START_SURVEY =
+            "com.hirenq.tmmrelay.START_SURVEY"
 
         const val EXTRA_STATUS = "status"
         const val EXTRA_POST_TIMESTAMP = "post_timestamp"

@@ -114,6 +114,21 @@
         android:elevation="4dp"
         style="@style/HirenqButton" />
 
+    <Button
+        android:id="@+id/btnStartSurvey"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:minHeight="56dp"
+        android:text="Start Survey"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:background="#5a5855"
+        android:elevation="4dp"
+        android:enabled="false"
+        style="@style/HirenqButton" />
+
     <!-- Status Section -->
     <TextView
         android:id="@+id/tvStatusLabel"

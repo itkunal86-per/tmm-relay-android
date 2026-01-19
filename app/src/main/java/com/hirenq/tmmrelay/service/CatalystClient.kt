@@ -264,6 +264,50 @@ class CatalystClient(
     fun getCurrentError(): String? = currentError
     
     /**
+     * Start Trimble Correction Hub Survey (matching demo MainModel.java startSurvey() line 844-935)
+     * This can be called manually from UI after connection is established
+     * @return ReturnCode indicating success or failure
+     */
+    fun startSurvey(): ReturnCode {
+        return try {
+            if (facade == null) {
+                LogCapture.log(Log.ERROR, TAG, "Cannot start survey - CatalystFacade is null")
+                return ReturnCode(DriverReturnCode.Error)
+            }
+            
+            if (!sdkConnected) {
+                LogCapture.log(Log.ERROR, TAG, "Cannot start survey - SDK not connected")
+                return ReturnCode(DriverReturnCode.Error)
+            }
+            
+            LogCapture.log(Log.INFO, TAG, "Starting Trimble Correction Hub Survey...")
+            val surveyRc = facade!!.startTrimbleCorrectionHubSurvey(trimble.jssi.android.catalystfacade.TargetReferenceFrame.UseLocalSettings)
+            
+            if (surveyRc.code == DriverReturnCode.Success) {
+                LogCapture.log(Log.INFO, TAG, "✅ Trimble Correction Hub Survey started successfully")
+                
+                // Try to get position immediately after survey starts
+                Thread.sleep(500) // Give positioning a moment to start
+                
+                // Check if we have a position available
+                latestPosition?.let { position ->
+                    LogCapture.log(Log.INFO, TAG, "Position available immediately after survey start")
+                    createAndSendTelemetry()
+                } ?: run {
+                    LogCapture.log(Log.INFO, TAG, "Position not yet available - will be received via event listener")
+                }
+            } else {
+                LogCapture.log(Log.WARN, TAG, "⚠️ Start Trimble Correction Hub Survey returned: ${surveyRc.code}")
+            }
+            
+            surveyRc
+        } catch (e: Exception) {
+            LogCapture.log(Log.ERROR, TAG, "Error starting survey: ${e.message}", e)
+            ReturnCode(DriverReturnCode.Error)
+        }
+    }
+    
+    /**
      * Get power source state directly from the sensor (matching CatalystFacade.java getPowerSourceState)
      * This queries the current power state rather than waiting for an event update
      * @return PowerSourceState or null if sensor is not connected or power info not available
@@ -643,8 +687,8 @@ class CatalystClient(
                     when (driverType) {
                         trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS, 
                         trimble.jssi.android.catalystfacade.DriverType.EM100 -> {
-                            LogCapture.log(Log.INFO, TAG, "Driver loaded: Trimble.Ssi.Driver.CarpoBased.Driver.RSeries")
-                            LogCapture.log(Log.INFO, TAG, "License name: TrimbleRSeries")
+                            LogCapture.log(Log.INFO, TAG, "Driver loaded: Trimble.Ssi.Driver.CarpoBased.Driver.TrimbleDA2")
+                            LogCapture.log(Log.INFO, TAG, "License name: TrimbleDA2")
                         }
                         trimble.jssi.android.catalystfacade.DriverType.Catalyst -> {
                             LogCapture.log(Log.INFO, TAG, "Driver registered: CatalystDriver (via registerDriver)")

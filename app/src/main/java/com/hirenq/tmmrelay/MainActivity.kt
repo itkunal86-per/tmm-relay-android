@@ -160,6 +160,9 @@ class MainActivity : ComponentActivity() {
             
             // Get data source
             val dataSource = intent.getStringExtra("dataSource") ?: "N/A"
+            
+            // Get survey status if available
+            val surveyStatus = intent.getStringExtra("surveyStatus")
 
             updateDiagnosticsUI(
                 fixType,
@@ -174,6 +177,14 @@ class MainActivity : ComponentActivity() {
                 mobileLongitude,
                 dataSource
             )
+            
+            // Update Start Survey button state based on connection status
+            binding.btnStartSurvey.isEnabled = isConnected && error == null
+            
+            // Show survey status if available
+            surveyStatus?.let {
+                Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -219,6 +230,15 @@ class MainActivity : ComponentActivity() {
             stopService(Intent(this, TmmRelayService::class.java))
             updateStatusUI("Stopped", "", "")
             binding.tvDiagnostics.text = "Stopped"
+        }
+
+        binding.btnStartSurvey.setOnClickListener {
+            // Send intent to service to start survey
+            val intent = Intent(this, TmmRelayService::class.java).apply {
+                action = TmmRelayService.ACTION_START_SURVEY
+            }
+            startService(intent)
+            Toast.makeText(this, "Starting survey...", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnAccessLog.setOnClickListener {
