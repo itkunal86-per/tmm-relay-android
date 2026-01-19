@@ -53,13 +53,14 @@ class CatalystClient(
     // but we use "CatalystClient" since we're in our own client class for better log filtering
     private val TAG = "CatalystClient"
     
-    // Config property keys (matching MainModel.java lines 171-175)
+    // Config property keys (matching MainModel.java lines 171-185)
     companion object {
         private const val CONFIG_KEY_DRIVER_TYPE = "DriverType"
         private const val CONFIG_KEY_CONNECTION_TYPE = "ConnectionType"
         private const val CONFIG_KEY_DEVICE_ADDRESS = "DeviceAddress"
         private const val CONFIG_KEY_DEVICE_NAME = "DeviceName"
         private const val CONFIG_KEY_DEVICE_PORT_NO = "DevicePortNo"
+        private const val CONFIG_KEY_REDUCED_ANTENNA_HEIGHT = "ReducedAntennaHeight"
     }
     
     // Read configuration from file (matching MainModel.java readConfig() lines 965-991)
@@ -203,6 +204,36 @@ class CatalystClient(
         } else {
             // Android 11 and below - Bluetooth permissions are granted at install time
             true
+        }
+    }
+    
+    // Set reduced antenna height from config (matching MainModel.java setReducedAntennaHeight() lines 678-693)
+    private fun setReducedAntennaHeight() {
+        try {
+            val config = readConfig()
+            val reducedAntennaHeightStr = config?.getProperty(CONFIG_KEY_REDUCED_ANTENNA_HEIGHT)
+            
+            if (config != null && reducedAntennaHeightStr != null) {
+                var reducedAntennaHeight = 2.0
+                
+                if (reducedAntennaHeightStr.isNotEmpty()) {
+                    try {
+                        reducedAntennaHeight = reducedAntennaHeightStr.toDouble()
+                    } catch (e: NumberFormatException) {
+                        LogCapture.log(Log.WARN, TAG, "Invalid ReducedAntennaHeight value in config: $reducedAntennaHeightStr")
+                        return
+                    }
+                }
+                
+                LogCapture.log(Log.INFO, TAG, "Setting reduced antenna height: $reducedAntennaHeight")
+                facade?.setReducedAntennaHeight(reducedAntennaHeight)
+                LogCapture.log(Log.INFO, TAG, "✅ Set reduced antenna height success")
+            } else {
+                LogCapture.log(Log.DEBUG, TAG, "ReducedAntennaHeight not configured, using default (0.0)")
+            }
+        } catch (e: Exception) {
+            // Ignoring exceptions (matching demo behavior)
+            LogCapture.log(Log.WARN, TAG, "Error setting reduced antenna height: ${e.message}")
         }
     }
     
@@ -692,35 +723,19 @@ class CatalystClient(
                 /* Give IPC a moment */
                 Thread.sleep(300)
 
-                /* ---------------- Step 5: Get Sensor Properties and Check License ---------------- */
-                LogCapture.log(Log.INFO, TAG, "Getting sensor properties...")
-            //    val sensorPropsRc = facade!!.getSensorProperties()
-              //  if (sensorPropsRc.code != DriverReturnCode.Success) {
-              //      LogCapture.log(Log.ERROR, TAG, "❌ Get sensor properties failed: ${sensorPropsRc.code}")
-              //      facade!!.disconnectFromSensor()
-              //      currentError = "NOT_LICENSED"
-              //      onError(RuntimeException("Get sensor properties failed: ${sensorPropsRc.code}"))
-              //      return@Thread
-              //  } else {
-               //     val sensorProperties = sensorPropsRc.returnedObject
-              //      if (sensorProperties.isLicensed()) {
-              //          LogCapture.log(Log.INFO, TAG, "✅ Get sensor properties success - Instrument licensed")
-               //         LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
-               //     } else {
-               //         LogCapture.log(Log.ERROR, TAG, "❌ Instrument is not licensed")
-               //         facade!!.disconnectFromSensor()
-               //         currentError = "NOT_LICENSED"
-               //         onError(RuntimeException("Instrument is not licensed"))
-                //        return@Thread
-               //     }
-               // }
+                /* ---------------- Step 7: Set Reduced Antenna Height (matching demo MainModel.java line 656-658) ---------------- */
+                // Only call setReducedAntennaHeight if connect was successful (matching demo line 656)
+                if (retCode.getCode() == DriverReturnCode.Success) {
+                    setReducedAntennaHeight()
+                } else {
+                    LogCapture.log(Log.WARN, TAG, "Skipping setReducedAntennaHeight - connect failed with code: ${retCode.getCode()}")
+                }
 
-            
-                /* ---------------- Step 7: Set Output Rate ---------------- */
+                /* ---------------- Step 8: Set Output Position Rate (matching demo MainModel.java line 662-665) ---------------- */
                 LogCapture.log(Log.INFO, TAG, "Setting output position rate...")
-                val rateRc = facade!!.setOutputPositionRate(PositionRate.OneHz)
-                if (rateRc.code != DriverReturnCode.Success) {
-                    LogCapture.log(Log.ERROR, TAG, "❌ Set output position rate failed: ${rateRc.code}")
+                val returnCode = facade!!.setOutputPositionRate(PositionRate.OneHz)
+                if (returnCode.getCode() != DriverReturnCode.Success) {
+                    LogCapture.log(Log.ERROR, TAG, "❌ Set output position rate failed: ${returnCode.getCode()}")
                 } else {
                     LogCapture.log(Log.INFO, TAG, "✅ Set output position rate success")
                 }
