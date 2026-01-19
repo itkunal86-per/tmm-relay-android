@@ -208,48 +208,6 @@ class CatalystClient(
         }
     }
     
-    // Start positioning explicitly (matching CatalystFacade.java subscribe() method lines 809-813)
-    private fun startPositioning() {
-        try {
-            // Use reflection to access the internal sensor object from CatalystFacade
-            // This ensures positioning is started even if internal subscribe() wasn't called
-            val facadeClass = facade?.javaClass
-            val sensorField = facadeClass?.getDeclaredField("sensor")
-            sensorField?.isAccessible = true
-            val sensor = sensorField?.get(facade)
-            
-            if (sensor == null) {
-                LogCapture.log(Log.WARN, TAG, "Sensor is null - positioning may already be started by CatalystFacade")
-                return
-            }
-            
-            // Get ISsiPositioning interface (matching CatalystFacade.java line 809)
-            val getInterfaceMethod = sensor.javaClass.getMethod("getInterface", Class.forName("trimble.jssi.interfaces.SsiInterfaceType"))
-            val ssiPositioningType = Class.forName("trimble.jssi.interfaces.SsiInterfaceType")
-            val positioningTypeEnum = ssiPositioningType.getField("SsiPositioning").get(null)
-            
-            val ssiPositioning = getInterfaceMethod.invoke(sensor, positioningTypeEnum)
-            
-            if (ssiPositioning != null) {
-                // Create PositioningSettings (matching CatalystFacade.java line 812)
-                val positioningSettingsClass = Class.forName("trimble.jssi.interfaces.gnss.positioning.PositioningSettings")
-                val positioningSettings = positioningSettingsClass.getDeclaredConstructor().newInstance()
-                
-                // Start positioning (matching CatalystFacade.java line 812)
-                val startPositioningMethod = ssiPositioning.javaClass.getMethod("startPositioning", positioningSettingsClass)
-                startPositioningMethod.invoke(ssiPositioning, positioningSettings)
-                
-                LogCapture.log(Log.INFO, TAG, "✅ Positioning started successfully via reflection")
-            } else {
-                LogCapture.log(Log.WARN, TAG, "ISsiPositioning interface not available - positioning may already be started")
-            }
-        } catch (e: Exception) {
-            // If reflection fails, positioning may already be started by CatalystFacade internally
-            LogCapture.log(Log.WARN, TAG, "Could not start positioning via reflection (may already be started): ${e.message}")
-            LogCapture.log(Log.DEBUG, TAG, "Positioning should be started automatically by CatalystFacade after connection")
-        }
-    }
-    
     // Set reduced antenna height from config (matching MainModel.java setReducedAntennaHeight() lines 678-693)
     private fun setReducedAntennaHeight() {
         try {
@@ -784,10 +742,6 @@ class CatalystClient(
                 } else {
                     LogCapture.log(Log.INFO, TAG, "✅ Set output position rate success")
                 }
-
-                /* ---------------- Step 9: Start Positioning (matching CatalystFacade.java lines 809-813) ---------------- */
-                // Explicitly start positioning to ensure we receive position updates
-                startPositioning()
 
                 sdkConnected = true
                 LogCapture.log(Log.INFO, TAG, "=== Catalyst SDK connected successfully ===")
