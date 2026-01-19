@@ -99,6 +99,7 @@ class CatalystClient(
         properties.setProperty(CONFIG_KEY_DEVICE_ADDRESS, "")
         properties.setProperty(CONFIG_KEY_DEVICE_NAME, "90:7B:C6:B4:12:30")
         properties.setProperty(CONFIG_KEY_DEVICE_PORT_NO, "")
+        properties.setProperty(CONFIG_KEY_REDUCED_ANTENNA_HEIGHT, "2.0")
         writeConfigToFile(properties)
     }
     
