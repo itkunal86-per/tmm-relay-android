@@ -519,45 +519,53 @@ class TmmRelayService : Service() {
         // Handle different intent actions
         when (intent?.action) {
             ACTION_CONNECT -> {
-                // Connect to Trimble sensor (matching demo MainModel.beginConnect())
+                // Check sensor properties and license (separate function, does NOT redo connection steps)
                 android.util.Log.i("TmmRelayService", "Received CONNECT action")
                 Thread {
                     try {
                         if (catalystClient == null) {
-                            android.util.Log.w("TmmRelayService", "Cannot connect - CatalystClient is null. Service may not be started.")
+                            android.util.Log.w("TmmRelayService", "Cannot check sensor - CatalystClient is null. Service may not be started.")
                             val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
-                                putExtra("connectStatus", "Cannot connect - Service not started")
+                                putExtra("connectStatus", "Cannot check sensor - Service not started")
                             }
                             LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
                             return@Thread
                         }
                         
                         val isAlreadyConnected = catalystClient?.getConnectionStatus() ?: false
-                        if (isAlreadyConnected) {
-                            android.util.Log.i("TmmRelayService", "Already connected to Trimble")
+                        if (!isAlreadyConnected) {
+                            android.util.Log.w("TmmRelayService", "Cannot check sensor - not connected. Please start relay first.")
                             val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
-                                putExtra("connectStatus", "Already connected")
+                                putExtra("connectStatus", "Not connected - Please start relay first")
                             }
                             LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
                         } else {
-                            android.util.Log.i("TmmRelayService", "Connecting to Trimble...")
-                            // Get tenantId and deviceId from SharedPreferences or use defaults
-                            val prefs = getSharedPreferences("TmmRelayPrefs", Context.MODE_PRIVATE)
-                            val tenantId = prefs.getString("tenantId", "") ?: ""
-                            val deviceId = prefs.getString("deviceId", "") ?: ""
-                            
-                            catalystClient?.connect(tenantId, deviceId)
-                            
-                            // Broadcast connecting status
-                            val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
-                                putExtra("connectStatus", "Connecting...")
+                            android.util.Log.i("TmmRelayService", "Checking sensor properties and license...")
+                            val checkRc = catalystClient?.checkSensorAndLicense()
+                            if (checkRc?.code == trimble.jssi.android.catalystfacade.DriverReturnCode.Success) {
+                                android.util.Log.i("TmmRelayService", "✅ Sensor is licensed and ready")
+                                val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                    putExtra("connectStatus", "Sensor is licensed and ready")
+                                }
+                                LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
+                            } else if (checkRc?.code == trimble.jssi.android.catalystfacade.DriverReturnCode.ErrorNoLicense) {
+                                android.util.Log.w("TmmRelayService", "⚠️ Sensor is not licensed")
+                                val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                    putExtra("connectStatus", "Sensor is not licensed")
+                                }
+                                LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
+                            } else {
+                                android.util.Log.w("TmmRelayService", "⚠️ Check sensor failed: ${checkRc?.code}")
+                                val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                    putExtra("connectStatus", "Check sensor failed: ${checkRc?.code}")
+                                }
+                                LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
                             }
-                            LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("TmmRelayService", "Error connecting: ${e.message}", e)
+                        android.util.Log.e("TmmRelayService", "Error checking sensor: ${e.message}", e)
                         val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
-                            putExtra("connectStatus", "Connect failed: ${e.message}")
+                            putExtra("connectStatus", "Check sensor failed: ${e.message}")
                         }
                         LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
                     }

@@ -264,6 +264,50 @@ class CatalystClient(
     fun getCurrentError(): String? = currentError
     
     /**
+     * Check sensor properties and license (separate function for Connect button)
+     * This only checks if already connected, gets sensor properties, and validates license
+     * Does NOT redo connection steps
+     */
+    fun checkSensorAndLicense(): ReturnCode {
+        return try {
+            LogCapture.log(Log.INFO, TAG, "=== Checking sensor properties and license ===")
+            
+            if (facade == null) {
+                LogCapture.log(Log.WARN, TAG, "Cannot check sensor - CatalystFacade is null")
+                return ReturnCode(DriverReturnCode.Error)
+            }
+            
+            if (!sdkConnected) {
+                LogCapture.log(Log.WARN, TAG, "Cannot check sensor - SDK not connected")
+                return ReturnCode(DriverReturnCode.Error)
+            }
+            
+            // Get sensor properties and check license (matching demo MainModel.java lines 630-647)
+            val sensorPropsRc = facade!!.getSensorProperties()
+            if (sensorPropsRc.code == DriverReturnCode.Success) {
+                val sensorProperties = sensorPropsRc.returnedObject
+                if (sensorProperties.isLicensed()) {
+                    LogCapture.log(Log.INFO, TAG, "✅ Sensor is licensed")
+                    LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
+                    currentError = null
+                    return ReturnCode(DriverReturnCode.Success)
+                } else {
+                    LogCapture.log(Log.ERROR, TAG, "❌ The instrument is not licensed")
+                    currentError = "NOT_LICENSED"
+                    return ReturnCode(DriverReturnCode.ErrorNoLicense)
+                }
+            } else {
+                LogCapture.log(Log.ERROR, TAG, "❌ Get sensor properties failed: ${sensorPropsRc.code}")
+                currentError = "CONNECT_FAILED"
+                return ReturnCode(DriverReturnCode.Error)
+            }
+        } catch (e: Exception) {
+            LogCapture.log(Log.ERROR, TAG, "Error checking sensor and license: ${e.message}", e)
+            ReturnCode(DriverReturnCode.Error)
+        }
+    }
+    
+    /**
      * Disconnect from sensor (matching demo MainModel.java disconnect() line 749-762)
      * This disconnects but keeps the facade and driver initialized
      * Use close() if you want to fully clean up
