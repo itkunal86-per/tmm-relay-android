@@ -181,6 +181,9 @@ class MainActivity : ComponentActivity() {
             val connectStatus = intent.getStringExtra("connectStatus")
             val disconnectStatus = intent.getStringExtra("disconnectStatus")
             
+            // Get load subscription status if available
+            val loadSubStatus = intent.getStringExtra("loadSubStatus")
+            
             // Get Trimble position data for display (matching demo MainActivity.updatePositionTable)
             val positionSolution = intent.getStringExtra("positionSolution")
             val positionLatitude = intent.getStringExtra("positionLatitude")
