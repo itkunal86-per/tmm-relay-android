@@ -264,45 +264,146 @@ class CatalystClient(
     fun getCurrentError(): String? = currentError
     
     /**
-     * Check sensor properties and license (separate function for Connect button)
-     * This only checks if already connected, gets sensor properties, and validates license
-     * Does NOT redo connection steps
+     * Connect to sensor (matching demo MainModel.java connect() - called by Connect button)
+     * This does the actual connection after subscription is loaded and driver is initialized
      */
-    fun checkSensorAndLicense(): ReturnCode {
+    fun connectToSensor(): ReturnCode {
         return try {
-            LogCapture.log(Log.INFO, TAG, "=== Checking sensor properties and license ===")
+            LogCapture.log(Log.INFO, TAG, "=== Connecting to sensor ===")
             
             if (facade == null) {
-                LogCapture.log(Log.WARN, TAG, "Cannot check sensor - CatalystFacade is null")
-                return ReturnCode(DriverReturnCode.Error)
-            }
-            
-            if (!sdkConnected) {
-                LogCapture.log(Log.WARN, TAG, "Cannot check sensor - SDK not connected")
-                return ReturnCode(DriverReturnCode.Error)
-            }
-            
-            // Get sensor properties and check license (matching demo MainModel.java lines 630-647)
-            val sensorPropsRc = facade!!.getSensorProperties()
-            if (sensorPropsRc.code == DriverReturnCode.Success) {
-                val sensorProperties = sensorPropsRc.returnedObject
-                if (sensorProperties.isLicensed()) {
-                    LogCapture.log(Log.INFO, TAG, "✅ Sensor is licensed")
-                    LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
-                    currentError = null
-                    return ReturnCode(DriverReturnCode.Success)
-                } else {
-                    LogCapture.log(Log.ERROR, TAG, "❌ The instrument is not licensed")
-                    currentError = "NOT_LICENSED"
-                    return ReturnCode(DriverReturnCode.ErrorNoLicense)
-                }
-            } else {
-                LogCapture.log(Log.ERROR, TAG, "❌ Get sensor properties failed: ${sensorPropsRc.code}")
+                LogCapture.log(Log.ERROR, TAG, "Cannot connect - CatalystFacade is null. Please load subscription first.")
                 currentError = "CONNECT_FAILED"
                 return ReturnCode(DriverReturnCode.Error)
             }
+            
+            /* ---------------- Step 1: Read Config and Connection Config ---------------- */
+            val config = readConfig()
+            if (config == null) {
+                LogCapture.log(Log.ERROR, TAG, "❌ Unable to read configuration")
+                currentError = "CONFIG_ERROR"
+                return ReturnCode(DriverReturnCode.Error)
+            }
+            
+            val connectionType = config.getProperty(CONFIG_KEY_CONNECTION_TYPE)
+            val deviceAddress = "90:7B:C6:B4:12:30"
+            //config.getProperty(CONFIG_KEY_DEVICE_ADDRESS)
+            val devicePortNo = config.getProperty(CONFIG_KEY_DEVICE_PORT_NO)
+            
+            // Read driver type from config
+            val deviceTypeStr = config.getProperty(CONFIG_KEY_DRIVER_TYPE)
+            val driverType = getDriverType(deviceTypeStr)
+            
+            /* ---------------- Step 2: Connect ---------------- */
+            LogCapture.log(Log.INFO, TAG, "Connecting to sensor using driver: $driverType...")
+            var retCode: ReturnCode = ReturnCode(DriverReturnCode.Error)
+            
+            // Handle different driver types matching MainModel.java pattern (lines 603-627)
+            when (driverType) {
+                trimble.jssi.android.catalystfacade.DriverType.Catalyst,
+                trimble.jssi.android.catalystfacade.DriverType.EM100,
+                trimble.jssi.android.catalystfacade.DriverType.TDC150 -> {
+                    LogCapture.log(Log.INFO, TAG, "Connecting via standard connection (Catalyst/EM100/TDC150)...")
+                    retCode = facade!!.connect()
+                }
+                
+                trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS,
+                trimble.jssi.android.catalystfacade.DriverType.SpectraPrecision -> {
+                    // Validate connection configuration
+                    if (!validateConnectionConfig(driverType, connectionType, deviceAddress, devicePortNo)) {
+                        currentError = "CONNECT_FAILED"
+                        return ReturnCode(DriverReturnCode.Error)
+                    }
+                    
+                    // Handle connection based on ConnectionType (matching MainModel.java lines 615-623)
+                    retCode = when (connectionType) {
+                        "Bluetooth" -> {
+                            if (!hasBluetoothPermissions()) {
+                                val errorMsg = "Bluetooth permissions not granted. Please grant BLUETOOTH_CONNECT and BLUETOOTH_SCAN permissions."
+                                LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
+                                currentError = "CONNECT_FAILED"
+                                ReturnCode(DriverReturnCode.Error)
+                            } else if (deviceAddress.isNullOrBlank()) {
+                                val errorMsg = "Bluetooth connection requires DeviceAddress in config.properties."
+                                LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
+                                currentError = "CONNECT_FAILED"
+                                ReturnCode(DriverReturnCode.Error)
+                            } else {
+                                LogCapture.log(Log.INFO, TAG, "Connecting via Bluetooth to address: $deviceAddress")
+                                facade!!.connectViaBluetooth(deviceAddress)
+                            }
+                        }
+                        "TcpIp" -> {
+                            LogCapture.log(Log.INFO, TAG, "Connecting via WiFi/TcpIp to $deviceAddress:$devicePortNo")
+                            facade!!.connectViaWifi(deviceAddress ?: "", devicePortNo ?: "")
+                        }
+                        else -> {
+                            LogCapture.log(Log.ERROR, TAG, "Invalid ConnectionType: $connectionType")
+                            currentError = "CONNECT_FAILED"
+                            ReturnCode(DriverReturnCode.Error)
+                        }
+                    }
+                }
+                
+                trimble.jssi.android.catalystfacade.DriverType.Mock -> {
+                    LogCapture.log(Log.INFO, TAG, "Connecting via Mock driver...")
+                    retCode = facade!!.connectMock()
+                }
+                
+                else -> {
+                    LogCapture.log(Log.ERROR, TAG, "Unsupported driver type: $driverType")
+                    currentError = "CONNECT_FAILED"
+                    return ReturnCode(DriverReturnCode.Error)
+                }
+            }
+            
+            /* ---------------- Step 3: Check License and Add Event Listener (matching demo MainModel.java lines 629-647) ---------------- */
+            if (retCode.getCode() == DriverReturnCode.Success) {
+                val sensorPropsRc = facade!!.getSensorProperties()
+                if (sensorPropsRc.code == DriverReturnCode.Success) {
+                    val sensorProperties = sensorPropsRc.returnedObject
+                    if (sensorProperties.isLicensed()) {
+                        LogCapture.log(Log.INFO, TAG, "✅ Sensor is licensed")
+                        LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
+                        // Add event listener after successful connection and license check (matching demo line 635)
+                        facade!!.addCatalystEventListener(eventListener)
+                    } else {
+                        LogCapture.log(Log.ERROR, TAG, "❌ The instrument is not licensed")
+                        facade!!.disconnectFromSensor()
+                        currentError = "NOT_LICENSED"
+                        return ReturnCode(DriverReturnCode.ErrorNoLicense)
+                    }
+                } else {
+                    LogCapture.log(Log.ERROR, TAG, "❌ Get sensor properties failed: ${sensorPropsRc.code}")
+                    currentError = "CONNECT_FAILED"
+                    return ReturnCode(DriverReturnCode.Error)
+                }
+            } else {
+                LogCapture.log(Log.ERROR, TAG, "❌ Connect failed: ${retCode.getCode()}")
+                currentError = "CONNECT_FAILED"
+                return ReturnCode(DriverReturnCode.Error)
+            }
+            
+            /* ---------------- Step 4: Set Reduced Antenna Height (matching demo MainModel.java line 656-658) ---------------- */
+            if (retCode.getCode() == DriverReturnCode.Success) {
+                setReducedAntennaHeight()
+            }
+            
+            /* ---------------- Step 5: Set Output Position Rate (matching demo MainModel.java line 662-665) ---------------- */
+            LogCapture.log(Log.INFO, TAG, "Setting output position rate...")
+            val returnCode = facade!!.setOutputPositionRate(PositionRate.OneHz)
+            if (returnCode.getCode() != DriverReturnCode.Success) {
+                LogCapture.log(Log.ERROR, TAG, "❌ Set output position rate failed: ${returnCode.getCode()}")
+            } else {
+                LogCapture.log(Log.INFO, TAG, "✅ Set output position rate success")
+            }
+            
+            sdkConnected = true
+            LogCapture.log(Log.INFO, TAG, "=== Sensor connected successfully ===")
+            retCode
         } catch (e: Exception) {
-            LogCapture.log(Log.ERROR, TAG, "Error checking sensor and license: ${e.message}", e)
+            LogCapture.log(Log.ERROR, TAG, "Error connecting to sensor: ${e.message}", e)
+            currentError = "CONNECT_FAILED"
             ReturnCode(DriverReturnCode.Error)
         }
     }
@@ -802,112 +903,7 @@ class CatalystClient(
                     }
                 }
 
-                /* ---------------- Step 5: Read Connection Config from Config File ---------------- */
-                // Read connection configuration from config file (matching MainModel.java line 596)
-                val connectionType = config.getProperty(CONFIG_KEY_CONNECTION_TYPE)
-                val deviceAddress = "90:7B:C6:B4:12:30"
-                //config.getProperty(CONFIG_KEY_DEVICE_ADDRESS)
-                val devicePortNo = config.getProperty(CONFIG_KEY_DEVICE_PORT_NO)
-                
-                /* ---------------- Step 6: Connect ---------------- */
-                LogCapture.log(Log.INFO, TAG, "Connecting to sensor using driver: $driverType...")
-                var retCode: ReturnCode = ReturnCode(DriverReturnCode.Error)
-                
-                // Handle different driver types matching MainModel.java pattern using when statement (lines 603-627)
-                when (driverType) {
-                    trimble.jssi.android.catalystfacade.DriverType.Catalyst,
-                    trimble.jssi.android.catalystfacade.DriverType.EM100,
-                    trimble.jssi.android.catalystfacade.DriverType.TDC150 -> {
-                        LogCapture.log(Log.INFO, TAG, "Connecting via standard connection (Catalyst/EM100/TDC150)...")
-                        retCode = facade!!.connect()
-                    }
-                    
-                    trimble.jssi.android.catalystfacade.DriverType.TrimbleGNSS,
-                    trimble.jssi.android.catalystfacade.DriverType.SpectraPrecision -> {
-                        // Validate connection configuration (matching Configuration.java updateConnectionTypes logic)
-                        // - TrimbleGNSS: supports both Bluetooth and TcpIp
-                        // - SpectraPrecision: supports only Bluetooth (not TcpIp)
-                        if (!validateConnectionConfig(driverType, connectionType, deviceAddress, devicePortNo)) {
-                            currentError = "CONNECT_FAILED"
-                            onError(RuntimeException("Invalid connection configuration for driver type $driverType"))
-                            return@Thread
-                        }
-                        
-                        // Handle connection based on ConnectionType (matching MainModel.java lines 615-623)
-                        // At this point, validation ensures:
-                        // - TrimbleGNSS: Bluetooth or TcpIp (both valid)
-                        // - SpectraPrecision: Bluetooth only (TcpIp rejected by validateConnectionConfig)
-                        retCode = when (connectionType) {
-                            "Bluetooth" -> {
-                                // Double-check Bluetooth permissions before connecting
-                                if (!hasBluetoothPermissions()) {
-                                    val errorMsg = "Bluetooth permissions not granted. Please grant BLUETOOTH_CONNECT and BLUETOOTH_SCAN permissions."
-                                    LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
-                                    currentError = "CONNECT_FAILED"
-                                    onError(RuntimeException(errorMsg))
-                                    ReturnCode(DriverReturnCode.Error)
-                                } else if (deviceAddress.isNullOrBlank()) {
-                                    val errorMsg = "Bluetooth connection requires DeviceAddress in config.properties. Example: DeviceAddress=00:11:22:33:44:55"
-                                    LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
-                                    currentError = "CONNECT_FAILED"
-                                    onError(RuntimeException(errorMsg))
-                                    ReturnCode(DriverReturnCode.Error)
-                                } else {
-                                    LogCapture.log(Log.INFO, TAG, "Connecting via Bluetooth to address: $deviceAddress")
-                                    LogCapture.log(Log.DEBUG, TAG, "Driver type: $driverType, Bluetooth address: $deviceAddress")
-                                    facade!!.connectViaBluetooth(deviceAddress)
-                                }
-                            }
-                            "TcpIp" -> {
-                                // TcpIp is only valid for TrimbleGNSS (validated in validateConnectionConfig)
-                                // SpectraPrecision cannot reach here due to validation
-                                LogCapture.log(Log.INFO, TAG, "Connecting via WiFi/TcpIp to $deviceAddress:$devicePortNo")
-                                facade!!.connectViaWifi(deviceAddress ?: "", devicePortNo ?: "")
-                            }
-                            else -> {
-                                LogCapture.log(Log.ERROR, TAG, "Invalid ConnectionType: $connectionType. Must be 'Bluetooth' or 'TcpIp'")
-                                currentError = "CONNECT_FAILED"
-                                onError(RuntimeException("Invalid ConnectionType: $connectionType. Must be 'Bluetooth' or 'TcpIp'"))
-                                ReturnCode(DriverReturnCode.Error)
-                            }
-                        }
-                    }
-                    
-                    trimble.jssi.android.catalystfacade.DriverType.Mock -> {
-                        LogCapture.log(Log.INFO, TAG, "Connecting via Mock driver...")
-                        retCode = facade!!.connectMock()
-                    }
-                    
-                    else -> {
-                        LogCapture.log(Log.ERROR, TAG, "Unsupported driver type: $driverType")
-                        currentError = "CONNECT_FAILED"
-                        onError(RuntimeException("Unsupported driver type: $driverType"))
-                        return@Thread
-                    }
-                }
-
-               
-                /* ---------------- Step 7: Add Event Listener (matching demo MainModel.java lines 629-647) ---------------- */
-                if (retCode.getCode() == DriverReturnCode.Success) {
-                    facade!!.addCatalystEventListener(eventListener)
-                }
-                
-                /* ---------------- Step 8: Set Reduced Antenna Height (matching demo MainModel.java line 656-658) ---------------- */
-                if (retCode.getCode() == DriverReturnCode.Success) {
-                    setReducedAntennaHeight()
-                }
-
-                /* ---------------- Step 9: Set Output Position Rate (matching demo MainModel.java line 662-665) ---------------- */
-                LogCapture.log(Log.INFO, TAG, "Setting output position rate...")
-                val returnCode = facade!!.setOutputPositionRate(PositionRate.OneHz)
-                if (returnCode.getCode() != DriverReturnCode.Success) {
-                    LogCapture.log(Log.ERROR, TAG, "❌ Set output position rate failed: ${returnCode.getCode()}")
-                } else {
-                    LogCapture.log(Log.INFO, TAG, "✅ Set output position rate success")
-                }
-
-                sdkConnected = true
-                LogCapture.log(Log.INFO, TAG, "=== Catalyst SDK connected successfully ===")
+                LogCapture.log(Log.INFO, TAG, "=== Subscription loaded and driver initialized successfully ===")
 
             } catch (e: Exception) {
                 LogCapture.log(Log.ERROR, TAG, "❌ Fatal connect error: ${e.message}", e)
