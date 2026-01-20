@@ -163,6 +163,10 @@ class MainActivity : ComponentActivity() {
             
             // Get survey status if available
             val surveyStatus = intent.getStringExtra("surveyStatus")
+            
+            // Get connect/disconnect status if available
+            val connectStatus = intent.getStringExtra("connectStatus")
+            val disconnectStatus = intent.getStringExtra("disconnectStatus")
 
             updateDiagnosticsUI(
                 fixType,
@@ -178,11 +182,23 @@ class MainActivity : ComponentActivity() {
                 dataSource
             )
             
+            // Update button states based on connection status (matching demo)
+            // Connect button: enabled when disconnected
+            // Disconnect button: enabled when connected
+            binding.btnConnect.isEnabled = !isConnected || error != null
+            binding.btnDisconnect.isEnabled = isConnected && error == null
+            
             // Update Start Survey button state based on connection status
             binding.btnStartSurvey.isEnabled = isConnected && error == null
             
-            // Show survey status if available
+            // Show status messages if available
             surveyStatus?.let {
+                Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
+            }
+            connectStatus?.let {
+                Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
+            }
+            disconnectStatus?.let {
                 Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
             }
         }
@@ -239,6 +255,24 @@ class MainActivity : ComponentActivity() {
             }
             startService(intent)
             Toast.makeText(this, "Starting survey...", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnConnect.setOnClickListener {
+            // Send intent to service to connect to Trimble (matching demo MainActivity.btnConnect)
+            val intent = Intent(this, TmmRelayService::class.java).apply {
+                action = TmmRelayService.ACTION_CONNECT
+            }
+            startService(intent)
+            Toast.makeText(this, "Connecting...", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnDisconnect.setOnClickListener {
+            // Send intent to service to disconnect from Trimble (matching demo MainActivity.btnDisconnect)
+            val intent = Intent(this, TmmRelayService::class.java).apply {
+                action = TmmRelayService.ACTION_DISCONNECT
+            }
+            startService(intent)
+            Toast.makeText(this, "Disconnecting...", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnAccessLog.setOnClickListener {

@@ -479,6 +479,89 @@ class TmmRelayService : Service() {
         
         // Handle different intent actions
         when (intent?.action) {
+            ACTION_CONNECT -> {
+                // Connect to Trimble sensor (matching demo MainModel.beginConnect())
+                android.util.Log.i("TmmRelayService", "Received CONNECT action")
+                Thread {
+                    try {
+                        if (catalystClient == null) {
+                            android.util.Log.w("TmmRelayService", "Cannot connect - CatalystClient is null. Service may not be started.")
+                            val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                putExtra("connectStatus", "Cannot connect - Service not started")
+                            }
+                            LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
+                            return@Thread
+                        }
+                        
+                        val isAlreadyConnected = catalystClient?.getConnectionStatus() ?: false
+                        if (isAlreadyConnected) {
+                            android.util.Log.i("TmmRelayService", "Already connected to Trimble")
+                            val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                putExtra("connectStatus", "Already connected")
+                            }
+                            LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
+                        } else {
+                            android.util.Log.i("TmmRelayService", "Connecting to Trimble...")
+                            // Get tenantId and deviceId from SharedPreferences or use defaults
+                            val prefs = getSharedPreferences("TmmRelayPrefs", Context.MODE_PRIVATE)
+                            val tenantId = prefs.getString("tenantId", "") ?: ""
+                            val deviceId = prefs.getString("deviceId", "") ?: ""
+                            
+                            catalystClient?.connect(tenantId, deviceId)
+                            
+                            // Broadcast connecting status
+                            val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                putExtra("connectStatus", "Connecting...")
+                            }
+                            LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("TmmRelayService", "Error connecting: ${e.message}", e)
+                        val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                            putExtra("connectStatus", "Connect failed: ${e.message}")
+                        }
+                        LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
+                    }
+                }.start()
+            }
+            ACTION_DISCONNECT -> {
+                // Disconnect from Trimble sensor (matching demo MainModel.beginDisconnect())
+                android.util.Log.i("TmmRelayService", "Received DISCONNECT action")
+                Thread {
+                    try {
+                        val isConnected = catalystClient?.getConnectionStatus() ?: false
+                        if (!isConnected) {
+                            android.util.Log.i("TmmRelayService", "Already disconnected from Trimble")
+                            val disconnectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                putExtra("disconnectStatus", "Already disconnected")
+                            }
+                            LocalBroadcastManager.getInstance(this).sendBroadcast(disconnectIntent)
+                        } else {
+                            android.util.Log.i("TmmRelayService", "Disconnecting from Trimble...")
+                            val disconnectRc = catalystClient?.disconnect()
+                            if (disconnectRc?.code == trimble.jssi.android.catalystfacade.DriverReturnCode.Success) {
+                                android.util.Log.i("TmmRelayService", "✅ Disconnected successfully")
+                                val disconnectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                    putExtra("disconnectStatus", "Disconnected")
+                                }
+                                LocalBroadcastManager.getInstance(this).sendBroadcast(disconnectIntent)
+                            } else {
+                                android.util.Log.w("TmmRelayService", "⚠️ Disconnect returned: ${disconnectRc?.code}")
+                                val disconnectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                    putExtra("disconnectStatus", "Disconnect failed: ${disconnectRc?.code}")
+                                }
+                                LocalBroadcastManager.getInstance(this).sendBroadcast(disconnectIntent)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("TmmRelayService", "Error disconnecting: ${e.message}", e)
+                        val disconnectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                            putExtra("disconnectStatus", "Disconnect failed: ${e.message}")
+                        }
+                        LocalBroadcastManager.getInstance(this).sendBroadcast(disconnectIntent)
+                    }
+                }.start()
+            }
             ACTION_START_SURVEY -> {
                 // Start survey if Trimble is connected and licensed
                 android.util.Log.i("TmmRelayService", "Received START_SURVEY action")
@@ -768,6 +851,10 @@ class TmmRelayService : Service() {
             "com.hirenq.tmmrelay.DIAGNOSTICS_UPDATE"
         const val ACTION_START_SURVEY =
             "com.hirenq.tmmrelay.START_SURVEY"
+        const val ACTION_CONNECT =
+            "com.hirenq.tmmrelay.CONNECT"
+        const val ACTION_DISCONNECT =
+            "com.hirenq.tmmrelay.DISCONNECT"
 
         const val EXTRA_STATUS = "status"
         const val EXTRA_POST_TIMESTAMP = "post_timestamp"

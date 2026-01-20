@@ -264,6 +264,55 @@ class CatalystClient(
     fun getCurrentError(): String? = currentError
     
     /**
+     * Disconnect from sensor (matching demo MainModel.java disconnect() line 749-762)
+     * This disconnects but keeps the facade and driver initialized
+     * Use close() if you want to fully clean up
+     */
+    fun disconnect(): ReturnCode {
+        return try {
+            LogCapture.log(Log.INFO, TAG, "=== Disconnecting from sensor ===")
+            
+            if (facade == null) {
+                LogCapture.log(Log.WARN, TAG, "Cannot disconnect - CatalystFacade is null")
+                return ReturnCode(DriverReturnCode.Error)
+            }
+            
+            // Step 1: Remove event listener (matching demo line 751)
+            try {
+                facade?.removeCatalystEventListener(eventListener)
+                LogCapture.log(Log.INFO, TAG, "✅ Event listener removed")
+            } catch (e: Exception) {
+                LogCapture.log(Log.WARN, TAG, "⚠ Error removing event listener: ${e.message}", e)
+            }
+            
+            // Step 2: Disconnect from sensor (matching demo line 752)
+            val retCode = facade!!.disconnectFromSensor()
+            
+            if (retCode.code == DriverReturnCode.Success) {
+                // Clear state (matching demo lines 756-761)
+                latestPosition = null
+                latestSatellites = null
+                latestBattery = null
+                latestHealth = null
+                latestSatellitesInView = null
+                lastDataReceivedAt = null
+                sdkConnected = false
+                isConnected = false
+                currentError = null
+                
+                LogCapture.log(Log.INFO, TAG, "✅ Disconnected from sensor successfully")
+            } else {
+                LogCapture.log(Log.WARN, TAG, "⚠ Disconnect returned: ${retCode.code}")
+            }
+            
+            retCode
+        } catch (e: Exception) {
+            LogCapture.log(Log.ERROR, TAG, "Error disconnecting: ${e.message}", e)
+            ReturnCode(DriverReturnCode.Error)
+        }
+    }
+    
+    /**
      * Start Trimble Correction Hub Survey (matching demo MainModel.java startSurvey() line 844-935)
      * This can be called manually from UI after connection is established
      * @return ReturnCode indicating success or failure
