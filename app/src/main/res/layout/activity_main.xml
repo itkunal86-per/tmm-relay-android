@@ -87,6 +87,152 @@
     android:textColor="@color/text_primary"
     android:elevation="2dp" />
 
+    <!-- Trimble Position Data (matching demo) -->
+    <TextView
+        android:id="@+id/tvPositionDataTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Trimble Position Data"
+        android:textStyle="bold"
+        android:textColor="@color/hirenq_grey" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="12dp"
+        android:background="@color/background_card"
+        android:elevation="2dp">
+
+        <TableLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:stretchColumns="1">
+
+            <TableRow>
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="Solution Type:"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/txtSolutionType"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="-" />
+            </TableRow>
+
+            <TableRow>
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="Latitude:"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/txtLatitude"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="-" />
+            </TableRow>
+
+            <TableRow>
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="Longitude:"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/txtLongitude"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="-" />
+            </TableRow>
+
+            <TableRow>
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="Height:"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/txtHeight"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="-" />
+            </TableRow>
+
+            <TableRow>
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="H Precision:"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/txtHPrecision"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="-" />
+            </TableRow>
+
+            <TableRow>
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="V Precision:"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/txtVPrecision"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="-" />
+            </TableRow>
+
+            <TableRow>
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="Correction Age:"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/txtCorrectionAge"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:padding="4dp"
+                    android:text="-" />
+            </TableRow>
+
+        </TableLayout>
+    </LinearLayout>
+
     <!-- Error Status Section -->
     <TextView
         android:id="@+id/tvErrorStatus"

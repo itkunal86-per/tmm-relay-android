@@ -167,6 +167,15 @@ class MainActivity : ComponentActivity() {
             // Get connect/disconnect status if available
             val connectStatus = intent.getStringExtra("connectStatus")
             val disconnectStatus = intent.getStringExtra("disconnectStatus")
+            
+            // Get Trimble position data for display (matching demo MainActivity.updatePositionTable)
+            val positionSolution = intent.getStringExtra("positionSolution")
+            val positionLatitude = intent.getStringExtra("positionLatitude")
+            val positionLongitude = intent.getStringExtra("positionLongitude")
+            val positionHeight = intent.getStringExtra("positionHeight")
+            val positionHPrecision = intent.getStringExtra("positionHPrecision")
+            val positionVPrecision = intent.getStringExtra("positionVPrecision")
+            val positionCorrectionAge = intent.getStringExtra("positionCorrectionAge")
 
             updateDiagnosticsUI(
                 fixType,
@@ -180,6 +189,18 @@ class MainActivity : ComponentActivity() {
                 mobileLatitude,
                 mobileLongitude,
                 dataSource
+            )
+            
+            // Update Trimble position data display (matching demo)
+            updatePositionData(
+                positionSolution,
+                positionLatitude,
+                positionLongitude,
+                positionHeight,
+                positionHPrecision,
+                positionVPrecision,
+                positionCorrectionAge,
+                isConnected
             )
             
             // Update button states based on connection status (matching demo)
@@ -735,6 +756,40 @@ class MainActivity : ComponentActivity() {
         
         // Check availability status and show success alerts when they become available
         checkAndShowAvailabilityAlerts(isConnected, error)
+    }
+    
+    /**
+     * Update Trimble position data display (matching demo MainActivity.updatePositionTable)
+     */
+    private fun updatePositionData(
+        solution: String?,
+        latitude: String?,
+        longitude: String?,
+        height: String?,
+        hPrecision: String?,
+        vPrecision: String?,
+        correctionAge: String?,
+        isConnected: Boolean
+    ) {
+        if (isConnected) {
+            // Update position data TextViews
+            binding.txtSolutionType.text = solution ?: "-"
+            binding.txtLatitude.text = latitude ?: "-"
+            binding.txtLongitude.text = longitude ?: "-"
+            binding.txtHeight.text = height?.let { "$it m" } ?: "-"
+            binding.txtHPrecision.text = hPrecision?.let { "$it m" } ?: "-"
+            binding.txtVPrecision.text = vPrecision?.let { "$it m" } ?: "-"
+            binding.txtCorrectionAge.text = correctionAge?.let { "$it s" } ?: "-"
+        } else {
+            // Clear position data when disconnected
+            binding.txtSolutionType.text = "-"
+            binding.txtLatitude.text = "-"
+            binding.txtLongitude.text = "-"
+            binding.txtHeight.text = "-"
+            binding.txtHPrecision.text = "-"
+            binding.txtVPrecision.text = "-"
+            binding.txtCorrectionAge.text = "-"
+        }
     }
     
     private fun checkAndShowAvailabilityAlerts(isConnected: Boolean, error: String?) {

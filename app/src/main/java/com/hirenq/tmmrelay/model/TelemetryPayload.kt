@@ -16,6 +16,11 @@ data class TelemetryPayload(
     val horizontalAccuracy: Double = 0.0, // DA2 receiver horizontal accuracy - defaults to 0.0 if not available
     val verticalAccuracy: Double = 0.0, // DA2 receiver vertical accuracy - defaults to 0.0 if not available
     val satellites: Int? = null, // DA2 receiver satellites - nullable
+    val solutionType: String? = null, // DA2 solution type (e.g., RTK_FIXED, RTK_FLOAT, AUTONOMOUS) - nullable
+    val height: Double? = null, // DA2 receiver height - nullable
+    val hPrecision: Double? = null, // DA2 receiver horizontal precision - nullable
+    val vPrecision: Double? = null, // DA2 receiver vertical precision - nullable
+    val correctionAge: Double? = null, // DA2 correction age in seconds - nullable
     val userId: String? = null, // DA2 user ID - nullable
     val userName: String? = null, // DA2 user name - nullable
     val userEmail: String? = null, // DA2 user email - nullable

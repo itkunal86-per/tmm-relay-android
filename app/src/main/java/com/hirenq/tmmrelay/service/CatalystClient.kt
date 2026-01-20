@@ -988,7 +988,19 @@ class CatalystClient(
             val validLat = if (!latDegrees.isNaN() && !latDegrees.isInfinite()) latDegrees else 0.0
             val validLon = if (!lonDegrees.isNaN() && !lonDegrees.isInfinite()) lonDegrees else 0.0
             
-            Log.d(TAG, "Creating telemetry payload: lat=$validLat, lon=$validLon, fixType=$fixTypeName")
+            // Get height (nullable)
+            val height = try {
+                val h = position.getHeight()
+                if (!h.isNaN() && !h.isInfinite()) h else null
+            } catch (e: Exception) { null }
+            
+            // Get correction age (nullable)
+            val correctionAge = try {
+                val age = position.getCorrectionAge()
+                if (!age.isNaN() && !age.isInfinite() && age >= 0) age else null
+            } catch (e: Exception) { null }
+            
+            Log.d(TAG, "Creating telemetry payload: lat=$validLat, lon=$validLon, fixType=$fixTypeName, height=$height, hPrec=$hPrecision, vPrec=$vPrecision, correctionAge=$correctionAge")
             
             val payload = TelemetryPayload(
                 tenantId = tenantId,
@@ -1003,6 +1015,11 @@ class CatalystClient(
                 horizontalAccuracy = if (hPrecision >= 0 && !hPrecision.isNaN() && !hPrecision.isInfinite()) hPrecision else 0.0, // DA2 horizontal accuracy
                 verticalAccuracy = if (vPrecision >= 0 && !vPrecision.isNaN() && !vPrecision.isInfinite()) vPrecision else 0.0, // DA2 vertical accuracy
                 satellites = if (latestSatellitesInView >= 0) latestSatellitesInView else null, // DA2 satellites
+                solutionType = solution?.toString(), // Solution type (e.g., RTK_FIXED, RTK_FLOAT, AUTONOMOUS)
+                height = height, // Height
+                hPrecision = if (hPrecision >= 0 && !hPrecision.isNaN() && !hPrecision.isInfinite()) hPrecision else null, // Horizontal precision
+                vPrecision = if (vPrecision >= 0 && !vPrecision.isNaN() && !vPrecision.isInfinite()) vPrecision else null, // Vertical precision
+                correctionAge = correctionAge, // Correction age in seconds
                 userId = null, // DA2 user data (not available)
                 userName = null, // DA2 user data (not available)
                 userEmail = null, // DA2 user data (not available)

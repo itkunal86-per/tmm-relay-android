@@ -68,6 +68,11 @@ object ApiClient {
             put("HorizontalAccuracy", if (payload.horizontalAccuracy != 0.0) payload.horizontalAccuracy else JSONObject.NULL) // DA2 horizontal accuracy
             put("VerticalAccuracy", if (payload.verticalAccuracy != 0.0) payload.verticalAccuracy else JSONObject.NULL) // DA2 vertical accuracy
             put("Satellites", payload.satellites ?: JSONObject.NULL) // DA2 satellites
+            put("SolutionType", payload.solutionType ?: JSONObject.NULL) // DA2 solution type
+            put("Height", payload.height ?: JSONObject.NULL) // DA2 height
+            put("HPrecision", payload.hPrecision ?: JSONObject.NULL) // DA2 horizontal precision
+            put("VPrecision", payload.vPrecision ?: JSONObject.NULL) // DA2 vertical precision
+            put("CorrectionAge", payload.correctionAge ?: JSONObject.NULL) // DA2 correction age in seconds
             
             // Optional user details - always include
             put("UserId", payload.userId ?: JSONObject.NULL)
@@ -102,7 +107,9 @@ object ApiClient {
                 "DeviceId=${payload.deviceId}, Lat=${payload.latitude}, Lng=${payload.longitude}, " +
                 "Battery=${payload.battery}, FixType=${payload.fixType}, Health=${payload.health}, " +
                 "HAcc=${payload.horizontalAccuracy}, VAcc=${payload.verticalAccuracy}, " +
-                "Satellites=${payload.satellites}, " +
+                "Satellites=${payload.satellites}, SolutionType=${payload.solutionType}, " +
+                "Height=${payload.height}, HPrecision=${payload.hPrecision}, VPrecision=${payload.vPrecision}, " +
+                "CorrectionAge=${payload.correctionAge}, " +
                 "MobileLat=${payload.mobileLatitude}, MobileLng=${payload.mobileLongitude}, " +
                 "MobileAcc=${payload.mobileAccuracy}, MobileBattery=${payload.mobileBattery}, " +
                 "MobileBatteryHealth=${payload.mobileBatteryHealth}, DataSource=${payload.dataSource}")

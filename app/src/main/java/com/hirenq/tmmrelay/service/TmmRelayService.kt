@@ -171,6 +171,45 @@ class TmmRelayService : Service() {
             catalystClient?.getCurrentError()?.let { error ->
                 putExtra("error", error)
             }
+            
+            // Add Trimble position data for display (matching demo MainActivity.updatePositionTable)
+            if (isConnected) {
+                catalystClient?.getLatestPosition()?.let { position ->
+                    try {
+                        // Solution type
+                        val solution = try { position.getSolution()?.toString() } catch (e: Exception) { null }
+                        putExtra("positionSolution", solution ?: "-")
+                        
+                        // Latitude (convert from radians to degrees)
+                        val latRadians = try { position.getLatitude() } catch (e: Exception) { 0.0 }
+                        val latDegrees = latRadians * 180.0 / kotlin.math.PI
+                        putExtra("positionLatitude", String.format(java.util.Locale.getDefault(), "%.8f", latDegrees))
+                        
+                        // Longitude (convert from radians to degrees)
+                        val lonRadians = try { position.getLongitude() } catch (e: Exception) { 0.0 }
+                        val lonDegrees = lonRadians * 180.0 / kotlin.math.PI
+                        putExtra("positionLongitude", String.format(java.util.Locale.getDefault(), "%.8f", lonDegrees))
+                        
+                        // Height
+                        val height = try { position.getHeight() } catch (e: Exception) { 0.0 }
+                        putExtra("positionHeight", String.format(java.util.Locale.getDefault(), "%.3f", height))
+                        
+                        // H Precision
+                        val hPrecision = try { position.getHPrecision() } catch (e: Exception) { 0.0 }
+                        putExtra("positionHPrecision", String.format(java.util.Locale.getDefault(), "%.3f", hPrecision))
+                        
+                        // V Precision
+                        val vPrecision = try { position.getVPrecision() } catch (e: Exception) { 0.0 }
+                        putExtra("positionVPrecision", String.format(java.util.Locale.getDefault(), "%.3f", vPrecision))
+                        
+                        // Correction Age
+                        val correctionAge = try { position.getCorrectionAge() } catch (e: Exception) { 0.0 }
+                        putExtra("positionCorrectionAge", String.format(java.util.Locale.getDefault(), "%.2f", correctionAge))
+                    } catch (e: Exception) {
+                        android.util.Log.e("TmmRelayService", "Error extracting position data: ${e.message}", e)
+                    }
+                }
+            }
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
