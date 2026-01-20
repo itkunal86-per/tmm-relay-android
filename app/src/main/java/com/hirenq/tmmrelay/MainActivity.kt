@@ -57,31 +57,36 @@ class MainActivity : ComponentActivity() {
             }
         }
     
-    // TMM Login launcher (matching demo MainActivity.onActivityResult REQUEST_LOGIN)
+    // TMM Login launcher (matching demo MainActivity.onActivityResult REQUEST_LOGIN lines 285-292)
     private val tmmLoginLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        // Match demo exactly - always try to load subscription, even if login was cancelled
         if (result.resultCode == RESULT_OK && result.data != null) {
             val accountTID = result.data?.getStringExtra("accountTID")
             if (accountTID != null && accountTID.isNotEmpty()) {
                 userTID = accountTID
                 prefs.edit().putString("userTID", accountTID).apply()
                 LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM Login successful - accountTID: $accountTID")
-                
-                // After successful login, load subscription (matching demo MainActivity.onActivityResult)
-                val intent = Intent(this, TmmRelayService::class.java).apply {
-                    action = TmmRelayService.ACTION_LOAD_SUBSCRIPTION
-                }
-                startService(intent)
-                Toast.makeText(this, "Loading subscription...", Toast.LENGTH_SHORT).show()
             } else {
+                // Login returned but no accountTID - clear userTID
+                userTID = null
+                prefs.edit().remove("userTID").apply()
                 LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM Login returned empty accountTID")
-                Toast.makeText(this, "Login failed: No accountTID returned", Toast.LENGTH_SHORT).show()
             }
         } else {
+            // Login cancelled or failed - clear userTID (matching demo line 290 - passes null)
+            userTID = null
+            prefs.edit().remove("userTID").apply()
             LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM Login cancelled or failed - resultCode: ${result.resultCode}")
-            Toast.makeText(this, "Login cancelled", Toast.LENGTH_SHORT).show()
         }
+        
+        // Always load subscription after login attempt (matching demo - calls beginLoadSubscription regardless)
+        val intent = Intent(this, TmmRelayService::class.java).apply {
+            action = TmmRelayService.ACTION_LOAD_SUBSCRIPTION
+        }
+        startService(intent)
+        Toast.makeText(this, "Loading subscription...", Toast.LENGTH_SHORT).show()
     }
     
     // TMM Check On Demand launcher (matching demo MainActivity.btnCheckOnDemand)
@@ -319,51 +324,47 @@ class MainActivity : ComponentActivity() {
         // Load Subscription button (matching demo MainActivity.btnLoadSubscription lines 128-143)
         binding.btnLoadSubscription.setOnClickListener {
             // We're using TMM subscription, so launch TMM login Intent first
-            val tmmPackageName = findInstalledTmmPackage()
-            if (tmmPackageName == null) {
-                android.app.AlertDialog.Builder(this)
-                    .setTitle("TMM Relay")
-                    .setMessage("Install Trimble Mobile Manager")
-                    .setPositiveButton("OK", null)
-                    .show()
-                return@setOnClickListener
-            }
-            
             try {
+                // Match demo exactly - no setPackage(), no FLAG_ACTIVITY_NEW_TASK
                 val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
-                    setPackage(tmmPackageName)
                     putExtra("applicationID", packageName)
-                    // Note: receiverName and noInstall are optional - add if needed
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // Note: receiverName and noInstall are optional extras in demo
+                    // We can add them if needed, but demo doesn't always use them
                 }
+                
+                // Check if Intent can be resolved
+                val resolveInfo = packageManager.resolveActivity(loginIntent, PackageManager.MATCH_DEFAULT_ONLY)
+                if (resolveInfo == null) {
+                    LogCapture.log(android.util.Log.ERROR, "MainActivity", "TMM Login Intent cannot be resolved - TMM may not be installed")
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("TMM Relay")
+                        .setMessage("Install Trimble Mobile Manager")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setOnClickListener
+                }
+                
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "Launching TMM Login Intent - applicationID: $packageName")
                 tmmLoginLauncher.launch(loginIntent)
-                LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM Login Intent launched for package: $tmmPackageName")
             } catch (e: android.content.ActivityNotFoundException) {
+                LogCapture.log(android.util.Log.ERROR, "MainActivity", "TMM Login Intent failed: ${e.message}", e)
                 android.app.AlertDialog.Builder(this)
                     .setTitle("TMM Relay")
                     .setMessage("Install Trimble Mobile Manager")
                     .setPositiveButton("OK", null)
                     .show()
+            } catch (e: Exception) {
+                LogCapture.log(android.util.Log.ERROR, "MainActivity", "Unexpected error launching TMM Login: ${e.message}", e)
+                Toast.makeText(this, "Error launching TMM Login: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
 
         binding.btnCheckOnDemand.setOnClickListener {
             // Launch TMM Check On Demand Intent (matching demo MainActivity.btnCheckOnDemand lines 145-154)
-            val tmmPackageName = findInstalledTmmPackage()
-            if (tmmPackageName == null) {
-                android.app.AlertDialog.Builder(this)
-                    .setTitle("TMM Relay")
-                    .setMessage("Install Trimble Mobile Manager")
-                    .setPositiveButton("OK", null)
-                    .show()
-                return@setOnClickListener
-            }
-            
             try {
+                // Match demo exactly - no setPackage(), no FLAG_ACTIVITY_NEW_TASK
                 val onDemandIntent = Intent("com.trimble.tmm.ONDEMAND").apply {
-                    setPackage(tmmPackageName)
                     putExtra("applicationID", packageName)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 tmmOnDemandLauncher.launch(onDemandIntent)
             } catch (e: android.content.ActivityNotFoundException) {
