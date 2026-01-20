@@ -649,7 +649,7 @@ class CatalystClient(
                     emptyList() 
                 }
                 Log.d(TAG, "Satellites: count=$satellitesInView, total=${satellites.size}")
-                // Update telemetry if we have position
+                            // Update telemetry if we have position
                 latestPosition?.let { this@CatalystClient.createAndSendTelemetry() }
             } catch (e: Exception) {
                 Log.e(TAG, "Error in onSatelliteUpdate: ${e.message}", e)
@@ -690,7 +690,7 @@ class CatalystClient(
                 latestHealth = sensorStateEvent
                 val sensorState = try { sensorStateEvent.getSensorState() } catch (e: Exception) { null }
                 Log.d(TAG, "Sensor state: $sensorState")
-            } catch (e: Exception) {
+                } catch (e: Exception) {
                 Log.e(TAG, "Error in onSensorStateChanged: ${e.message}", e)
                 e.printStackTrace()
             }
@@ -936,11 +936,11 @@ class CatalystClient(
 
                 LogCapture.log(Log.INFO, TAG, "=== Subscription loaded and driver initialized successfully ===")
 
-            } catch (e: Exception) {
+        } catch (e: Exception) {
                 LogCapture.log(Log.ERROR, TAG, "❌ Fatal connect error: ${e.message}", e)
                 currentError = "INIT_FAILED"
-                onError(e)
-            }
+            onError(e)
+        }
         }.start()
     }
     

@@ -24,6 +24,8 @@ import android.location.Location
 import trimble.jssi.android.catalystfacade.DriverType
 import java.time.Instant
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorService
 
 class TmmRelayService : Service() {
 
@@ -53,6 +55,22 @@ class TmmRelayService : Service() {
     private var mobileAccuracy = -1.0
 
     private val handler = Handler(Looper.getMainLooper())
+    
+    // Thread executor for running operations sequentially (matching demo MainModel.java line 227)
+    private val threadExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    
+    /**
+     * Run operation on thread (matching demo MainModel.java runOnThread() lines 1447-1454)
+     * @param runnable The operation to run
+     * @param newThread If true, creates a new thread. If false, uses threadExecutor (sequential execution)
+     */
+    private fun runOnThread(runnable: Runnable, newThread: Boolean) {
+        if (newThread) {
+            Thread(runnable).start()
+        } else {
+            threadExecutor.execute(runnable)
+        }
+    }
 
     private val notificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -501,9 +519,9 @@ class TmmRelayService : Service() {
         // Handle different intent actions
         when (intent?.action) {
             ACTION_CONNECT -> {
-                // Connect to sensor (matching demo MainModel.beginConnect() - Connect button)
+                // Connect to sensor (matching demo MainModel.beginConnect() - runs on thread)
                 android.util.Log.i("TmmRelayService", "Received CONNECT action")
-                Thread {
+                runOnThread(Runnable {
                     try {
                         if (catalystClient == null) {
                             android.util.Log.w("TmmRelayService", "Cannot connect - CatalystClient is null. Service may not be started.")
@@ -511,8 +529,14 @@ class TmmRelayService : Service() {
                                 putExtra("connectStatus", "Cannot connect - Service not started")
                             }
                             LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
-                            return@Thread
+                            return@Runnable
                         }
+                        
+                        // Show "Connecting" status (matching demo MainModel.connect() line 593)
+                        val connectingIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                            putExtra("connectStatus", "Connecting...")
+                        }
+                        LocalBroadcastManager.getInstance(this).sendBroadcast(connectingIntent)
                         
                         android.util.Log.i("TmmRelayService", "Connecting to sensor...")
                         val connectRc = catalystClient?.connectToSensor()
@@ -525,29 +549,29 @@ class TmmRelayService : Service() {
                         } else if (connectRc?.code == trimble.jssi.android.catalystfacade.DriverReturnCode.ErrorNoLicense) {
                             android.util.Log.w("TmmRelayService", "⚠️ Sensor is not licensed")
                             val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
-                                putExtra("connectStatus", "Sensor is not licensed")
+                                putExtra("connectStatus", "The instrument is not licensed")
                             }
                             LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
                         } else {
                             android.util.Log.w("TmmRelayService", "⚠️ Connect failed: ${connectRc?.code}")
                             val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
-                                putExtra("connectStatus", "Connect failed: ${connectRc?.code}")
+                                putExtra("connectStatus", "Unable to connect")
                             }
                             LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
                         }
                     } catch (e: Exception) {
                         android.util.Log.e("TmmRelayService", "Error connecting: ${e.message}", e)
                         val connectIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
-                            putExtra("connectStatus", "Connect failed: ${e.message}")
+                            putExtra("connectStatus", "Unable to connect: ${e.message}")
                         }
                         LocalBroadcastManager.getInstance(this).sendBroadcast(connectIntent)
                     }
-                }.start()
+                }, false)
             }
             ACTION_DISCONNECT -> {
                 // Disconnect from Trimble sensor (matching demo MainModel.beginDisconnect())
                 android.util.Log.i("TmmRelayService", "Received DISCONNECT action")
-                Thread {
+                runOnThread(Runnable {
                     try {
                         val isConnected = catalystClient?.getConnectionStatus() ?: false
                         if (!isConnected) {
@@ -580,12 +604,12 @@ class TmmRelayService : Service() {
                         }
                         LocalBroadcastManager.getInstance(this).sendBroadcast(disconnectIntent)
                     }
-                }.start()
+                }, false)
             }
             ACTION_LOAD_SUBSCRIPTION -> {
                 // Load subscription and initialize driver (matching demo MainModel.beginLoadSubscription() - Subscribe button)
                 android.util.Log.i("TmmRelayService", "Received LOAD_SUBSCRIPTION action")
-                Thread {
+                runOnThread(Runnable {
                     try {
                         // Create CatalystClient if it doesn't exist
                         if (catalystClient == null) {
@@ -675,12 +699,12 @@ class TmmRelayService : Service() {
                         }
                         LocalBroadcastManager.getInstance(this).sendBroadcast(loadSubIntent)
                     }
-                }.start()
+                }, false)
             }
             ACTION_START_SURVEY -> {
-                // Start survey if Trimble is connected and licensed
+                // Start survey if Trimble is connected and licensed (matching demo MainModel.beginStartSurvey())
                 android.util.Log.i("TmmRelayService", "Received START_SURVEY action")
-                Thread {
+                runOnThread(Runnable {
                     try {
                         val isConnected = catalystClient?.getConnectionStatus() ?: false
                         if (isConnected) {
@@ -710,12 +734,12 @@ class TmmRelayService : Service() {
                     } catch (e: Exception) {
                         android.util.Log.e("TmmRelayService", "Error starting survey: ${e.message}", e)
                     }
-                }.start()
+                }, false)
             }
             ACTION_END_SURVEY -> {
                 // End survey (matching demo MainModel.beginEndSurvey())
                 android.util.Log.i("TmmRelayService", "Received END_SURVEY action")
-                Thread {
+                runOnThread(Runnable {
                     try {
                         val isConnected = catalystClient?.getConnectionStatus() ?: false
                         if (isConnected) {
@@ -744,7 +768,7 @@ class TmmRelayService : Service() {
                     } catch (e: Exception) {
                         android.util.Log.e("TmmRelayService", "Error ending survey: ${e.message}", e)
                     }
-                }.start()
+                }, false)
             }
             else -> {
                 // Get userTID from intent if provided (e.g., after TMM Login)
@@ -768,6 +792,16 @@ class TmmRelayService : Service() {
     }
 
     override fun onDestroy() {
+        // Shutdown thread executor (matching demo pattern - cleanup resources)
+        try {
+            threadExecutor.shutdown()
+            if (!threadExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                threadExecutor.shutdownNow()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("TmmRelayService", "Error shutting down thread executor: ${e.message}")
+            threadExecutor.shutdownNow()
+        }
         isRelayStarted = false
         
         // Stop location updates
