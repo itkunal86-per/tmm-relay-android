@@ -654,6 +654,21 @@ class MainActivity : ComponentActivity() {
         // Stop token refresh timer (matching CatalystFacadeActivity.java)
         stopTokenRefreshTimer()
     }
+    
+    override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
+        menuInflater.inflate(R.menu.topmainmenu, menu)
+        return true
+    }
+    
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        when (item.itemId) {
+            R.id.menuConfiguration -> {
+                startActivity(Intent(this, ConfigurationActivity::class.java))
+                return true
+            }
+        }
+        return super.onOptionsItemSelected(item)
+    }
 
     // ---------------- UI UPDATES ----------------
 

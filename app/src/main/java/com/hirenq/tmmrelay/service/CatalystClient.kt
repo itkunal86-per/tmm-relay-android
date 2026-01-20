@@ -359,28 +359,53 @@ class CatalystClient(
             
             /* ---------------- Step 3: Check License and Add Event Listener (matching demo MainModel.java lines 629-647) ---------------- */
             if (retCode.getCode() == DriverReturnCode.Success) {
+                // Give the sensor a moment to initialize after connection (IPC may need time)
+                Thread.sleep(300)
+                
+                // Matching demo line 630 - directly access returnedObject without checking code first
+                // The demo assumes getSensorProperties() will succeed after successful connection
                 val sensorPropsRc = facade!!.getSensorProperties()
-                if (sensorPropsRc.code == DriverReturnCode.Success) {
-                    val sensorProperties = sensorPropsRc.returnedObject
-                    if (sensorProperties.isLicensed()) {
-                        LogCapture.log(Log.INFO, TAG, "✅ Sensor is licensed")
-                        LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
-                        // Add event listener after successful connection and license check (matching demo line 635)
-                        facade!!.addCatalystEventListener(eventListener)
-                    } else {
-                        LogCapture.log(Log.ERROR, TAG, "❌ The instrument is not licensed")
-                        facade!!.disconnectFromSensor()
-                        currentError = "NOT_LICENSED"
-                        return ReturnCode(DriverReturnCode.ErrorNoLicense)
-                    }
+                LogCapture.log(Log.DEBUG, TAG, "getSensorProperties() returned code: ${sensorPropsRc.code}")
+                
+                // Try to get sensor properties - if code is not Success, try again after delay
+                var sensorProperties = if (sensorPropsRc.code == DriverReturnCode.Success) {
+                    sensorPropsRc.returnedObject
                 } else {
-                    LogCapture.log(Log.ERROR, TAG, "❌ Get sensor properties failed: ${sensorPropsRc.code}")
-                    currentError = "CONNECT_FAILED"
-                    return ReturnCode(DriverReturnCode.Error)
+                    LogCapture.log(Log.WARN, TAG, "getSensorProperties() returned ${sensorPropsRc.code}, retrying after delay...")
+                    Thread.sleep(1000) // Wait longer for sensor to fully initialize
+                    val retrySensorPropsRc = facade!!.getSensorProperties()
+                    if (retrySensorPropsRc.code == DriverReturnCode.Success) {
+                        retrySensorPropsRc.returnedObject
+                    } else {
+                        LogCapture.log(Log.ERROR, TAG, "❌ Get sensor properties failed after retry: ${retrySensorPropsRc.code}")
+                        facade!!.disconnectFromSensor()
+                        currentError = "CONNECT_FAILED"
+                        onError(RuntimeException("Get sensor properties failed: ${retrySensorPropsRc.code}"))
+                        return ReturnCode(DriverReturnCode.Error)
+                    }
+                }
+                
+                LogCapture.log(Log.DEBUG, TAG, "Sensor properties retrieved - Instrument: ${sensorProperties.instrumentName}, Serial: ${sensorProperties.serialNumber}, Licensed: ${sensorProperties.isLicensed()}")
+                
+                // Matching demo line 631 - check isLicensed() directly
+                if (sensorProperties.isLicensed()) {
+                    LogCapture.log(Log.INFO, TAG, "✅ Sensor is licensed")
+                    LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
+                    // Add event listener after successful connection and license check (matching demo line 635)
+                    facade!!.addCatalystEventListener(eventListener)
+                    Thread.sleep(300) // Give IPC a moment after adding listener
+                } else {
+                    LogCapture.log(Log.ERROR, TAG, "❌ The instrument is not licensed")
+                    LogCapture.log(Log.ERROR, TAG, "Sensor properties - Instrument: ${sensorProperties.instrumentName}, Serial: ${sensorProperties.serialNumber}, Licensed: false")
+                    facade!!.disconnectFromSensor()
+                    currentError = "NOT_LICENSED"
+                    onError(RuntimeException("The instrument is not licensed"))
+                    return ReturnCode(DriverReturnCode.ErrorNoLicense)
                 }
             } else {
                 LogCapture.log(Log.ERROR, TAG, "❌ Connect failed: ${retCode.getCode()}")
                 currentError = "CONNECT_FAILED"
+                onError(RuntimeException("Unable to connect: ${retCode.getCode()}"))
                 return ReturnCode(DriverReturnCode.Error)
             }
             

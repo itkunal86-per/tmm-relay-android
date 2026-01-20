@@ -55,6 +55,18 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <activity
+            android:name=".ConfigurationActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:label="Configuration" />
+
+        <activity
+            android:name=".BTSelectActivity"
+            android:exported="false"
+            android:parentActivityName=".ConfigurationActivity"
+            android:label="Select Bluetooth Device" />
+
         <service
             android:name=".service.TmmRelayService"
             android:foregroundServiceType="location|connectedDevice"
