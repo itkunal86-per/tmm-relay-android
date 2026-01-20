@@ -465,10 +465,9 @@ class TmmRelayService : Service() {
             )
             android.util.Log.i("TmmRelayService", "Step 6: Foreground service started")
 
-            // Connect Catalyst client
-            android.util.Log.i("TmmRelayService", "Step 7: Connecting Catalyst client")
-            catalystClient?.connect(tenantId, deviceId)
-            android.util.Log.i("TmmRelayService", "Step 7: Catalyst connect() called")
+            // NOTE: Do NOT auto-connect here. Connection should be done via Load Subscription and Connect buttons
+            // Start Relay only starts the telemetry relay service (POST every 5 minutes)
+            android.util.Log.i("TmmRelayService", "Service started - ready for Load Subscription and Connect")
             
         } catch (e: Exception) {
             android.util.Log.e("TmmRelayService", "CRITICAL ERROR in onCreate(): ${e.message}", e)
@@ -600,6 +599,40 @@ class TmmRelayService : Service() {
                     }
                 }.start()
             }
+            ACTION_LOAD_SUBSCRIPTION -> {
+                // Load subscription and initialize driver (matching demo MainModel.beginLoadSubscription() - Subscribe button)
+                android.util.Log.i("TmmRelayService", "Received LOAD_SUBSCRIPTION action")
+                Thread {
+                    try {
+                        if (catalystClient == null) {
+                            android.util.Log.w("TmmRelayService", "Cannot load subscription - CatalystClient is null. Service may not be started.")
+                            val loadSubIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                putExtra("loadSubStatus", "Cannot load subscription - Service not started")
+                            }
+                            LocalBroadcastManager.getInstance(this).sendBroadcast(loadSubIntent)
+                            return@Thread
+                        }
+                        
+                        android.util.Log.i("TmmRelayService", "Loading subscription...")
+                        val prefs = getSharedPreferences("TmmRelayPrefs", Context.MODE_PRIVATE)
+                        val tenantId = prefs.getString("tenantId", "") ?: ""
+                        val deviceId = prefs.getString("deviceId", "") ?: ""
+                        
+                        catalystClient?.loadSubscription(tenantId, deviceId)
+                        
+                        val loadSubIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                            putExtra("loadSubStatus", "Loading subscription...")
+                        }
+                        LocalBroadcastManager.getInstance(this).sendBroadcast(loadSubIntent)
+                    } catch (e: Exception) {
+                        android.util.Log.e("TmmRelayService", "Error loading subscription: ${e.message}", e)
+                        val loadSubIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                            putExtra("loadSubStatus", "Load subscription failed: ${e.message}")
+                        }
+                        LocalBroadcastManager.getInstance(this).sendBroadcast(loadSubIntent)
+                    }
+                }.start()
+            }
             ACTION_START_SURVEY -> {
                 // Start survey if Trimble is connected and licensed
                 android.util.Log.i("TmmRelayService", "Received START_SURVEY action")
@@ -632,6 +665,40 @@ class TmmRelayService : Service() {
                         }
                     } catch (e: Exception) {
                         android.util.Log.e("TmmRelayService", "Error starting survey: ${e.message}", e)
+                    }
+                }.start()
+            }
+            ACTION_END_SURVEY -> {
+                // End survey (matching demo MainModel.beginEndSurvey())
+                android.util.Log.i("TmmRelayService", "Received END_SURVEY action")
+                Thread {
+                    try {
+                        val isConnected = catalystClient?.getConnectionStatus() ?: false
+                        if (isConnected) {
+                            android.util.Log.i("TmmRelayService", "Ending survey...")
+                            val endSurveyRc = catalystClient?.endSurvey()
+                            if (endSurveyRc?.code == trimble.jssi.android.catalystfacade.DriverReturnCode.Success) {
+                                android.util.Log.i("TmmRelayService", "✅ Survey ended successfully")
+                                val surveyIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                    putExtra("surveyStatus", "Survey Ended")
+                                }
+                                LocalBroadcastManager.getInstance(this).sendBroadcast(surveyIntent)
+                            } else {
+                                android.util.Log.w("TmmRelayService", "⚠️ End survey failed: ${endSurveyRc?.code}")
+                                val surveyIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                    putExtra("surveyStatus", "End Survey Failed: ${endSurveyRc?.code}")
+                                }
+                                LocalBroadcastManager.getInstance(this).sendBroadcast(surveyIntent)
+                            }
+                        } else {
+                            android.util.Log.w("TmmRelayService", "Cannot end survey - Trimble not connected")
+                            val surveyIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
+                                putExtra("surveyStatus", "Cannot end survey - Trimble not connected")
+                            }
+                            LocalBroadcastManager.getInstance(this).sendBroadcast(surveyIntent)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("TmmRelayService", "Error ending survey: ${e.message}", e)
                     }
                 }.start()
             }
@@ -889,6 +956,10 @@ class TmmRelayService : Service() {
             "com.hirenq.tmmrelay.DIAGNOSTICS_UPDATE"
         const val ACTION_START_SURVEY =
             "com.hirenq.tmmrelay.START_SURVEY"
+        const val ACTION_END_SURVEY =
+            "com.hirenq.tmmrelay.END_SURVEY"
+        const val ACTION_LOAD_SUBSCRIPTION =
+            "com.hirenq.tmmrelay.LOAD_SUBSCRIPTION"
         const val ACTION_CONNECT =
             "com.hirenq.tmmrelay.CONNECT"
         const val ACTION_DISCONNECT =

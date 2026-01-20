@@ -458,6 +458,33 @@ class CatalystClient(
     }
     
     /**
+     * End Survey (matching demo MainModel.java endSurvey() line 942-946)
+     * @return ReturnCode indicating success or failure
+     */
+    fun endSurvey(): ReturnCode {
+        return try {
+            LogCapture.log(Log.INFO, TAG, "Ending survey...")
+            
+            if (facade == null) {
+                LogCapture.log(Log.ERROR, TAG, "Cannot end survey - CatalystFacade is null")
+                return ReturnCode(DriverReturnCode.Error)
+            }
+            
+            val retCode = facade!!.endSurvey()
+            if (retCode.code == DriverReturnCode.Success) {
+                LogCapture.log(Log.INFO, TAG, "✅ Survey ended successfully")
+            } else {
+                LogCapture.log(Log.WARN, TAG, "⚠️ End survey returned: ${retCode.code}")
+            }
+            
+            retCode
+        } catch (e: Exception) {
+            LogCapture.log(Log.ERROR, TAG, "Error ending survey: ${e.message}", e)
+            ReturnCode(DriverReturnCode.Error)
+        }
+    }
+    
+    /**
      * Start Trimble Correction Hub Survey (matching demo MainModel.java startSurvey() line 844-935)
      * This can be called manually from UI after connection is established
      * @return ReturnCode indicating success or failure
@@ -764,13 +791,17 @@ class CatalystClient(
     }
 
 
-    fun connect(tenantId: String, deviceId: String) {
+    /**
+     * Load Subscription (matching demo MainModel.java loadSubscription() - called by Subscribe button)
+     * This loads subscription and initializes driver, but does NOT connect
+     */
+    fun loadSubscription(tenantId: String, deviceId: String) {
         this.tenantId = tenantId
         this.deviceId = deviceId
 
         Thread {
             try {
-                LogCapture.log(Log.INFO, TAG, "=== Catalyst connect() start ===")
+                LogCapture.log(Log.INFO, TAG, "=== Load Subscription start ===")
 
                 /* ---------------- Step 1: Create Facade ---------------- */
                 val appGuid = context.packageName

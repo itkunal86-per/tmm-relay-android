@@ -81,6 +81,19 @@ class MainActivity : ComponentActivity() {
         }
     }
     
+    // TMM Check On Demand launcher (matching demo MainActivity.btnCheckOnDemand)
+    private val tmmOnDemandLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK && result.data != null) {
+            val claimCountdown = result.data?.getStringExtra("claimCountdown")
+            if (claimCountdown != null) {
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "On Demand claim: $claimCountdown")
+                Toast.makeText(this, "Claim: $claimCountdown", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
     // TID Token Refresh launcher (matching CatalystFacadeActivity.java)
     private val tmmRefreshTokenLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -209,8 +222,9 @@ class MainActivity : ComponentActivity() {
             binding.btnConnect.isEnabled = !isConnected || error != null
             binding.btnDisconnect.isEnabled = isConnected && error == null
             
-            // Update Start Survey button state based on connection status
+            // Update Start Survey and End Survey button states based on connection status
             binding.btnStartSurvey.isEnabled = isConnected && error == null
+            binding.btnEndSurvey.isEnabled = isConnected && error == null
             
             // Show status messages if available
             surveyStatus?.let {
@@ -220,6 +234,9 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
             }
             disconnectStatus?.let {
+                Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
+            }
+            loadSubStatus?.let {
                 Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
             }
         }
@@ -245,7 +262,29 @@ class MainActivity : ComponentActivity() {
         updateStatusUI("Stopped", "", "")
         binding.tvDiagnostics.text = "Waiting for diagnostics..."
 
+        binding.btnLoadSubscription.setOnClickListener {
+            // Send intent to service to load subscription (matching demo MainActivity.btnSubscribe)
+            val intent = Intent(this, TmmRelayService::class.java).apply {
+                action = TmmRelayService.ACTION_LOAD_SUBSCRIPTION
+            }
+            startService(intent)
+            Toast.makeText(this, "Loading subscription...", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnCheckOnDemand.setOnClickListener {
+            // Launch TMM Check On Demand Intent (matching demo MainActivity.btnCheckOnDemand)
+            val onDemandIntent = Intent("com.trimble.tmm.ONDEMAND").apply {
+                putExtra("applicationID", packageName)
+            }
+            try {
+                tmmOnDemandLauncher.launch(onDemandIntent)
+            } catch (e: android.content.ActivityNotFoundException) {
+                Toast.makeText(this, "Please install Trimble Mobile Manager", Toast.LENGTH_LONG).show()
+            }
+        }
+
         binding.btnStart.setOnClickListener {
+            // Start Relay - does NOT connect, just starts telemetry relay service (POST every 5 minutes)
             // Check if all permissions are granted before starting
             if (!hasAllCriticalPermissions()) {
                 LogCapture.log(android.util.Log.WARN, "MainActivity", "Missing critical permissions - cannot start service")
@@ -276,6 +315,15 @@ class MainActivity : ComponentActivity() {
             }
             startService(intent)
             Toast.makeText(this, "Starting survey...", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnEndSurvey.setOnClickListener {
+            // Send intent to service to end survey (matching demo MainActivity.btnEndSurvey)
+            val intent = Intent(this, TmmRelayService::class.java).apply {
+                action = TmmRelayService.ACTION_END_SURVEY
+            }
+            startService(intent)
+            Toast.makeText(this, "Ending survey...", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnConnect.setOnClickListener {
