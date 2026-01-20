@@ -410,7 +410,7 @@ class CatalystClient(
     // Track latest values from different event types
     private var latestPosition: PositionUpdate? = null
     private var latestSatellites: SatelliteUpdate? = null
-    private var latestSatellitesInView: Int = 0
+    private var latestSatellitesInView: Int? = null
     private var latestBattery: PowerSourceState? = null
     private var latestHealth: SensorStateEvent? = null
 
@@ -801,20 +801,18 @@ class CatalystClient(
                                     LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
                                     currentError = "CONNECT_FAILED"
                                     onError(RuntimeException(errorMsg))
-                                    return@Thread
-                                }
-                                
-                                if (deviceAddress.isNullOrBlank()) {
+                                    ReturnCode(DriverReturnCode.Error)
+                                } else if (deviceAddress.isNullOrBlank()) {
                                     val errorMsg = "Bluetooth connection requires DeviceAddress in config.properties. Example: DeviceAddress=00:11:22:33:44:55"
                                     LogCapture.log(Log.ERROR, TAG, "❌ $errorMsg")
                                     currentError = "CONNECT_FAILED"
                                     onError(RuntimeException(errorMsg))
-                                    return@Thread
+                                    ReturnCode(DriverReturnCode.Error)
+                                } else {
+                                    LogCapture.log(Log.INFO, TAG, "Connecting via Bluetooth to address: $deviceAddress")
+                                    LogCapture.log(Log.DEBUG, TAG, "Driver type: $driverType, Bluetooth address: $deviceAddress")
+                                    facade!!.connectViaBluetooth(deviceAddress)
                                 }
-                                
-                                LogCapture.log(Log.INFO, TAG, "Connecting via Bluetooth to address: $deviceAddress")
-                                LogCapture.log(Log.DEBUG, TAG, "Driver type: $driverType, Bluetooth address: $deviceAddress")
-                                retCode = facade!!.connectViaBluetooth(deviceAddress)
                             }
                             "TcpIp" -> {
                                 // TcpIp is only valid for TrimbleGNSS (validated in validateConnectionConfig)
@@ -826,7 +824,7 @@ class CatalystClient(
                                 LogCapture.log(Log.ERROR, TAG, "Invalid ConnectionType: $connectionType. Must be 'Bluetooth' or 'TcpIp'")
                                 currentError = "CONNECT_FAILED"
                                 onError(RuntimeException("Invalid ConnectionType: $connectionType. Must be 'Bluetooth' or 'TcpIp'"))
-                                return@Thread
+                                ReturnCode(DriverReturnCode.Error)
                             }
                         }
                     }
@@ -844,56 +842,48 @@ class CatalystClient(
                     }
                 }
                 
-               
-
-                /* 🔴 REQUIRED IN 2025.12.5 — ADD LISTENER IMMEDIATELY */
-                LogCapture.log(Log.INFO, TAG, "Adding event listener (early)...")
-                facade!!.addCatalystEventListener(eventListener)
-
-                /* Give IPC a moment */
-                Thread.sleep(300)
-
-                /* ---------------- Step 7: Set Reduced Antenna Height (matching demo MainModel.java line 656-658) ---------------- */
-                // Only call setReducedAntennaHeight if connect was successful (matching demo line 656)
+                /* ---------------- Step 7: Check License and Add Event Listener (matching demo MainModel.java lines 629-647) ---------------- */
                 if (retCode.getCode() == DriverReturnCode.Success) {
-                    setReducedAntennaHeight()
+                    val sensorPropsRc = facade!!.getSensorProperties()
+                    if (sensorPropsRc.code == DriverReturnCode.Success) {
+                        val sensorProperties = sensorPropsRc.returnedObject
+                        if (sensorProperties.isLicensed()) {
+                            LogCapture.log(Log.INFO, TAG, "✅ Sensor is licensed")
+                            LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
+                            // Add event listener after successful connection and license check (matching demo line 635)
+                            facade!!.addCatalystEventListener(eventListener)
+                        } else {
+                            LogCapture.log(Log.ERROR, TAG, "❌ The instrument is not licensed")
+                            facade!!.disconnectFromSensor()
+                            currentError = "NOT_LICENSED"
+                            onError(RuntimeException("The instrument is not licensed"))
+                            return@Thread
+                        }
+                    } else {
+                        LogCapture.log(Log.ERROR, TAG, "❌ Get sensor properties failed: ${sensorPropsRc.code}")
+                        currentError = "CONNECT_FAILED"
+                        onError(RuntimeException("Get sensor properties failed: ${sensorPropsRc.code}"))
+                        return@Thread
+                    }
                 } else {
-                    LogCapture.log(Log.WARN, TAG, "Skipping setReducedAntennaHeight - connect failed with code: ${retCode.getCode()}")
+                    LogCapture.log(Log.ERROR, TAG, "❌ Connect failed: ${retCode.getCode()}")
+                    currentError = "CONNECT_FAILED"
+                    onError(RuntimeException("Unable to connect: ${retCode.getCode()}"))
+                    return@Thread
                 }
 
-                /* ---------------- Step 8: Set Output Position Rate (matching demo MainModel.java line 662-665) ---------------- */
+                /* ---------------- Step 8: Set Reduced Antenna Height (matching demo MainModel.java line 656-658) ---------------- */
+                if (retCode.getCode() == DriverReturnCode.Success) {
+                    setReducedAntennaHeight()
+                }
+
+                /* ---------------- Step 9: Set Output Position Rate (matching demo MainModel.java line 662-665) ---------------- */
                 LogCapture.log(Log.INFO, TAG, "Setting output position rate...")
                 val returnCode = facade!!.setOutputPositionRate(PositionRate.OneHz)
                 if (returnCode.getCode() != DriverReturnCode.Success) {
                     LogCapture.log(Log.ERROR, TAG, "❌ Set output position rate failed: ${returnCode.getCode()}")
                 } else {
                     LogCapture.log(Log.INFO, TAG, "✅ Set output position rate success")
-                }
-
-                /* ---------------- Step 9: Check Sensor Properties and Start Survey if Licensed ---------------- */
-                // Check if sensor is licensed before starting survey
-                if (retCode.getCode() == DriverReturnCode.Success) {
-                    // Start Trimble Correction Hub Survey (matching demo MainModel.java line 864)
-                    val surveyRc = facade!!.startTrimbleCorrectionHubSurvey(trimble.jssi.android.catalystfacade.TargetReferenceFrame.UseLocalSettings)
-                    if (surveyRc.code == DriverReturnCode.Success) {
-                        LogCapture.log(Log.INFO, TAG, "✅ Trimble Correction Hub Survey started successfully")
-                        
-                        // Try to get position immediately after survey starts
-                        // Position updates will come through the event listener, but we can check if one is already available
-                        LogCapture.log(Log.INFO, TAG, "Waiting briefly for first position update...")
-                        Thread.sleep(500) // Give positioning a moment to start
-                        
-                        // Check if we have a position available
-                        latestPosition?.let { position ->
-                            LogCapture.log(Log.INFO, TAG, "Position available immediately after survey start")
-                            // Create and send telemetry with the current position
-                            createAndSendTelemetry()
-                        } ?: run {
-                            LogCapture.log(Log.INFO, TAG, "Position not yet available - will be received via event listener")
-                        }
-                    } else {
-                        LogCapture.log(Log.WARN, TAG, "⚠️ Start Trimble Correction Hub Survey returned: ${surveyRc.code}")
-                    }
                 }
 
                 sdkConnected = true
@@ -959,10 +949,11 @@ class CatalystClient(
             }
             
             // Calculate receiver health based on position and satellite data
+            val satellitesCount = latestSatellitesInView ?: 0
             val receiverHealth = when {
                 fixTypeName.contains("INVALID", ignoreCase = true) -> "NO_FIX"
-                (fixTypeName.contains("AUTONOMOUS", ignoreCase = true) && latestSatellitesInView < 4) -> "NO_FIX"
-                latestSatellitesInView < 4 -> "POOR"
+                (fixTypeName.contains("AUTONOMOUS", ignoreCase = true) && satellitesCount < 4) -> "NO_FIX"
+                satellitesCount < 4 -> "POOR"
                 hPrecision > 2.5 -> "POOR"
                 hPrecision > 0 && hPrecision < 1.0 -> "EXCELLENT"
                 hPrecision > 0 -> "GOOD"
@@ -972,7 +963,7 @@ class CatalystClient(
             // Calculate overall health
             val health = when {
                 (latDegrees == 0.0 && lonDegrees == 0.0) || latDegrees.isNaN() || lonDegrees.isNaN() -> "NO_COORDINATES"
-                (fixTypeName.contains("AUTONOMOUS", ignoreCase = true) && latestSatellitesInView < 4) -> "NO_FIX"
+                (fixTypeName.contains("AUTONOMOUS", ignoreCase = true) && satellitesCount < 4) -> "NO_FIX"
                 try { latestHealth?.getSensorState()?.toString()?.contains("ERROR", ignoreCase = true) == true } catch (e: Exception) { false } -> "ERROR"
                 else -> "OK"
             }
@@ -1014,7 +1005,7 @@ class CatalystClient(
                 health = health, // DA2 health
                 horizontalAccuracy = if (hPrecision >= 0 && !hPrecision.isNaN() && !hPrecision.isInfinite()) hPrecision else 0.0, // DA2 horizontal accuracy
                 verticalAccuracy = if (vPrecision >= 0 && !vPrecision.isNaN() && !vPrecision.isInfinite()) vPrecision else 0.0, // DA2 vertical accuracy
-                satellites = if (latestSatellitesInView >= 0) latestSatellitesInView else null, // DA2 satellites
+                satellites = latestSatellitesInView?.takeIf { it >= 0 }, // DA2 satellites
                 solutionType = solution?.toString(), // Solution type (e.g., RTK_FIXED, RTK_FLOAT, AUTONOMOUS)
                 height = height, // Height
                 hPrecision = if (hPrecision >= 0 && !hPrecision.isNaN() && !hPrecision.isInfinite()) hPrecision else null, // Horizontal precision
@@ -1243,7 +1234,7 @@ class CatalystClient(
             latestSatellites = null
             latestBattery = null
             latestHealth = null
-            latestSatellitesInView = 0
+            latestSatellitesInView = null
 
         } catch (e: Exception) {
             Log.e(TAG, "Error closing Catalyst client", e)
