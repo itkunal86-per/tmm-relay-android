@@ -46,15 +46,18 @@ class MainActivity : ComponentActivity() {
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-            // Handle permission results
+            // Handle permission results (matching demo MainActivity.onRequestPermissionsResult)
             val allGranted = permissions.all { it.value }
             LogCapture.log(android.util.Log.INFO, "MainActivity", "Permission request completed. All granted: $allGranted")
-            if (!allGranted) {
-                LogCapture.log(android.util.Log.WARN, "MainActivity", "Some permissions were denied")
+            if (allGranted) {
+                // All permissions granted, initialize UI elements (matching demo line 115)
+                initUiElements()
+            } else {
+                Toast.makeText(this, "Permissions required by the application are denied", Toast.LENGTH_LONG).show()
             }
         }
     
-    // TMM Login launcher (using ActivityResultLauncher as per demo)
+    // TMM Login launcher (matching demo MainActivity.onActivityResult REQUEST_LOGIN)
     private val tmmLoginLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -64,13 +67,13 @@ class MainActivity : ComponentActivity() {
                 userTID = accountTID
                 prefs.edit().putString("userTID", accountTID).apply()
                 LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM Login successful - accountTID: $accountTID")
-                Toast.makeText(this, "Login successful", Toast.LENGTH_SHORT).show()
                 
-                // Store userTID for CatalystClient to use
-                // Restart service to apply new userTID
-                if (hasAllCriticalPermissions()) {
-                    startRelayService()
+                // After successful login, load subscription (matching demo MainActivity.onActivityResult)
+                val intent = Intent(this, TmmRelayService::class.java).apply {
+                    action = TmmRelayService.ACTION_LOAD_SUBSCRIPTION
                 }
+                startService(intent)
+                Toast.makeText(this, "Loading subscription...", Toast.LENGTH_SHORT).show()
             } else {
                 LogCapture.log(android.util.Log.WARN, "MainActivity", "TMM Login returned empty accountTID")
                 Toast.makeText(this, "Login failed: No accountTID returned", Toast.LENGTH_SHORT).show()
@@ -253,36 +256,122 @@ class MainActivity : ComponentActivity() {
         // Initialize crash handler to catch all uncaught exceptions
         CrashHandler.init()
         
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        
+        // Request permissions first (matching demo MainActivity.onCreate)
+        requestPermissions()
+    }
+    
+    /**
+     * Request permissions (matching demo MainActivity.requestPermissions)
+     */
+    private fun requestPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val permissions = mutableListOf<String>()
+            
+            // Basic permissions (matching demo line 67-69)
+            permissions.addAll(listOf(
+                Manifest.permission.BLUETOOTH_ADMIN,
+                Manifest.permission.BLUETOOTH,
+                Manifest.permission.INTERNET,
+                Manifest.permission.ACCESS_NETWORK_STATE,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.READ_PHONE_STATE
+            ))
+            
+            // Android 12+ permissions (matching demo line 71-73)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                permissions.addAll(listOf(
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ))
+            } else {
+                permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+            
+            // Filter to only request permissions that are not already granted
+            val permissionsToRequest = permissions.filter {
+                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+            }
+            
+            if (permissionsToRequest.isNotEmpty()) {
+                permissionLauncher.launch(permissionsToRequest.toTypedArray())
+                return
+            }
+        }
+        
+        // All permissions granted, initialize UI elements (matching demo line 85)
+        initUiElements()
+    }
+    
+    /**
+     * Initialize UI elements (matching demo MainActivity.initUiElements)
+     */
+    private fun initUiElements() {
         // Check if TMM is installed and visible at startup
         checkTmmInstallation()
         
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-       
-        if (!hasAllCriticalPermissions()) {
-         ensurePermissions()    
-        }    
         updateStatusUI("Stopped", "", "")
         binding.tvDiagnostics.text = "Waiting for diagnostics..."
 
+        // Load Subscription button (matching demo MainActivity.btnLoadSubscription lines 128-143)
         binding.btnLoadSubscription.setOnClickListener {
-            // Send intent to service to load subscription (matching demo MainActivity.btnSubscribe)
-            val intent = Intent(this, TmmRelayService::class.java).apply {
-                action = TmmRelayService.ACTION_LOAD_SUBSCRIPTION
+            // We're using TMM subscription, so launch TMM login Intent first
+            val tmmPackageName = findInstalledTmmPackage()
+            if (tmmPackageName == null) {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("TMM Relay")
+                    .setMessage("Install Trimble Mobile Manager")
+                    .setPositiveButton("OK", null)
+                    .show()
+                return@setOnClickListener
             }
-            startService(intent)
-            Toast.makeText(this, "Loading subscription...", Toast.LENGTH_SHORT).show()
+            
+            try {
+                val loginIntent = Intent("com.trimble.tmm.LOGIN").apply {
+                    setPackage(tmmPackageName)
+                    putExtra("applicationID", packageName)
+                    // Note: receiverName and noInstall are optional - add if needed
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                tmmLoginLauncher.launch(loginIntent)
+                LogCapture.log(android.util.Log.INFO, "MainActivity", "TMM Login Intent launched for package: $tmmPackageName")
+            } catch (e: android.content.ActivityNotFoundException) {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("TMM Relay")
+                    .setMessage("Install Trimble Mobile Manager")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
         }
 
         binding.btnCheckOnDemand.setOnClickListener {
-            // Launch TMM Check On Demand Intent (matching demo MainActivity.btnCheckOnDemand)
-            val onDemandIntent = Intent("com.trimble.tmm.ONDEMAND").apply {
-                putExtra("applicationID", packageName)
+            // Launch TMM Check On Demand Intent (matching demo MainActivity.btnCheckOnDemand lines 145-154)
+            val tmmPackageName = findInstalledTmmPackage()
+            if (tmmPackageName == null) {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("TMM Relay")
+                    .setMessage("Install Trimble Mobile Manager")
+                    .setPositiveButton("OK", null)
+                    .show()
+                return@setOnClickListener
             }
+            
             try {
+                val onDemandIntent = Intent("com.trimble.tmm.ONDEMAND").apply {
+                    setPackage(tmmPackageName)
+                    putExtra("applicationID", packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
                 tmmOnDemandLauncher.launch(onDemandIntent)
             } catch (e: android.content.ActivityNotFoundException) {
-                Toast.makeText(this, "Please install Trimble Mobile Manager", Toast.LENGTH_LONG).show()
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("TMM Relay")
+                    .setMessage("Install Trimble Mobile Manager")
+                    .setPositiveButton("OK", null)
+                    .show()
             }
         }
 
@@ -532,68 +621,37 @@ class MainActivity : ComponentActivity() {
     
     override fun onResume() {
         super.onResume()
-        LogCapture.log(android.util.Log.INFO, "MainActivity", "=== onResume() started ===")
+        
+        // Register status update listeners (matching demo MainActivity.onResume line 198)
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            statusReceiver,
+            IntentFilter(TmmRelayService.ACTION_STATUS_UPDATE)
+        )
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            diagnosticsReceiver,
+            IntentFilter(TmmRelayService.ACTION_DIAGNOSTICS_UPDATE)
+        )
         
         // Start token refresh timer (matching CatalystFacadeActivity.java)
         startTokenRefreshTimer()
         
-        try {
-            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Section 1: Registering status receiver")
-            LocalBroadcastManager.getInstance(this).registerReceiver(
-                statusReceiver,
-                IntentFilter(TmmRelayService.ACTION_STATUS_UPDATE)
-            )
-            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Status receiver registered successfully")
-            
-            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Section 2: Registering diagnostics receiver")
-            LocalBroadcastManager.getInstance(this).registerReceiver(
-                diagnosticsReceiver,
-                IntentFilter(TmmRelayService.ACTION_DIAGNOSTICS_UPDATE)
-            )
-            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Diagnostics receiver registered successfully")
-
-            // Request all permissions when app opens for the first time
-            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Section 3: Checking if permissions have been requested (hasRequestedPermissions: $hasRequestedPermissions)")
-            if (!hasRequestedPermissions) {
-                LogCapture.log(android.util.Log.INFO, "MainActivity", "Permissions not yet requested - requesting permissions on app open (onResume)...")
-                ensurePermissions()
-                hasRequestedPermissions = true
-                LogCapture.log(android.util.Log.INFO, "MainActivity", "Permission request initiated, hasRequestedPermissions set to true")
-            } else {
-                LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Permissions already requested previously, skipping permission request")
-            }
-            
-            // Start service on resume to trigger subscription and license detection
-            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Section 4: Checking critical permissions before starting service")
-            val hasCriticalPermissions = hasAllCriticalPermissions()
-            LogCapture.log(android.util.Log.DEBUG, "MainActivity", "Critical permissions check result: $hasCriticalPermissions")
-            
-            if (hasCriticalPermissions) {
-                LogCapture.log(android.util.Log.INFO, "MainActivity", "All critical permissions granted - starting service for subscription/license detection")
-                startRelayService()
-                LogCapture.log(android.util.Log.INFO, "MainActivity", "Service start initiated")
-            } else {
-                LogCapture.log(android.util.Log.WARN, "MainActivity", "Critical permissions missing - cannot start service. Please grant required permissions.")
-            }
-            
-            LogCapture.log(android.util.Log.INFO, "MainActivity", "=== onResume() completed successfully ===")
-        } catch (e: Exception) {
-            LogCapture.log(android.util.Log.ERROR, "MainActivity", "Error in onResume(): ${e.message}", e)
-        }
+        // Note: Demo doesn't auto-start service in onResume
+        // Service should only start when user clicks "Start Relay" button
     }
 
     override fun onPause() {
         super.onPause()
         
-        // Stop token refresh timer (matching CatalystFacadeActivity.java)
-        stopTokenRefreshTimer()
-        
+        // Remove status update listeners (matching demo MainActivity.onPause line 262)
         try {
             LocalBroadcastManager.getInstance(this)
                 .unregisterReceiver(statusReceiver)
             LocalBroadcastManager.getInstance(this)
                 .unregisterReceiver(diagnosticsReceiver)
         } catch (_: Exception) {}
+        
+        // Stop token refresh timer (matching CatalystFacadeActivity.java)
+        stopTokenRefreshTimer()
     }
 
     // ---------------- UI UPDATES ----------------
@@ -1027,6 +1085,34 @@ class MainActivity : ComponentActivity() {
     }
 
     // ---------------- TMM INSTALLATION CHECK ----------------
+    
+    /**
+     * Find installed TMM package name (matching demo pattern)
+     */
+    private fun findInstalledTmmPackage(): String? {
+        val possiblePackages = listOf(
+            "com.trimble.trimblemobilemanager",
+            "com.trimble.tmm",
+            "com.trimble.mobilemanager"
+        )
+        
+        for (packageName in possiblePackages) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    packageManager.getPackageInfo(
+                        packageName,
+                        PackageManager.PackageInfoFlags.of(0)
+                    )
+                } else {
+                    packageManager.getPackageInfo(packageName, 0)
+                }
+                return packageName
+            } catch (e: Exception) {
+                // Package not found, try next
+            }
+        }
+        return null
+    }
 
     private fun isTmmInstalledAndVisible(ctx: Context): Boolean {
         return try {

@@ -412,27 +412,10 @@ class TmmRelayService : Service() {
             }
         }
 
-            // Always use Catalyst SDK
-            // Driver type will be read from config file (matching demo MainModel.java pattern)
-            // Get userTID from SharedPreferences (set by MainActivity after TMM Login)
-            val userTID = getSharedPreferences("TmmRelayPrefs", Context.MODE_PRIVATE)
-                .getString("userTID", null)
-            if (userTID != null) {
-                android.util.Log.i("TmmRelayService", "Using userTID from TMM Login: $userTID")
-            } else {
-                android.util.Log.i("TmmRelayService", "No userTID found - will use default TMM subscription")
-            }
-            
-            android.util.Log.i("TmmRelayService", "Step 3: Creating CatalystClient instance")
-            catalystClient = CatalystClient(
-                context = this,
-                onMessage = payloadHandler,
-                onError = { error ->
-                    handleCatalystError(error)
-                },
-                userTID = userTID  // Pass userTID to use loadSubscriptionFromTrimbleMobileManager
-            )
-            android.util.Log.i("TmmRelayService", "Step 3: CatalystClient created")
+            // NOTE: Do NOT create CatalystClient here
+            // CatalystClient should only be created when Load Subscription button is clicked
+            // Start Relay only starts the telemetry relay service (POST every 5 minutes)
+            android.util.Log.i("TmmRelayService", "Service initialized - CatalystClient will be created when Load Subscription is called")
 
             android.util.Log.i("TmmRelayService", "Step 4: Creating notification channel")
             createNotificationChannel()
@@ -604,13 +587,74 @@ class TmmRelayService : Service() {
                 android.util.Log.i("TmmRelayService", "Received LOAD_SUBSCRIPTION action")
                 Thread {
                     try {
+                        // Create CatalystClient if it doesn't exist
                         if (catalystClient == null) {
-                            android.util.Log.w("TmmRelayService", "Cannot load subscription - CatalystClient is null. Service may not be started.")
-                            val loadSubIntent = Intent(ACTION_DIAGNOSTICS_UPDATE).apply {
-                                putExtra("loadSubStatus", "Cannot load subscription - Service not started")
+                            android.util.Log.i("TmmRelayService", "Creating CatalystClient for Load Subscription...")
+                            
+                            // Get userTID from SharedPreferences (set by MainActivity after TMM Login)
+                            val userTID = getSharedPreferences("TmmRelayPrefs", Context.MODE_PRIVATE)
+                                .getString("userTID", null)
+                            if (userTID != null) {
+                                android.util.Log.i("TmmRelayService", "Using userTID from TMM Login: $userTID")
+                            } else {
+                                android.util.Log.i("TmmRelayService", "No userTID found - will use default TMM subscription")
                             }
-                            LocalBroadcastManager.getInstance(this).sendBroadcast(loadSubIntent)
-                            return@Thread
+                            
+                            // Common handler for processing payloads from Catalyst client
+                            val payloadHandler: (TelemetryPayload) -> Unit = { payload ->
+                                try {
+                                    lastMessageAt = Instant.now()
+
+                                    // Update lastKnown DA2 coordinates only if payload has DA2 coordinates
+                                    if (payload.latitude != 0.0 || payload.longitude != 0.0) {
+                                        lastKnownLatitude = payload.latitude
+                                        lastKnownLongitude = payload.longitude
+                                        lastKnownFixType = payload.fixType ?: "UNKNOWN"
+                                    }
+
+                                    broadcastDiagnostics(payload)
+
+                                    val shouldSendPost =
+                                        lastSuccessfulPostAt == null ||
+                                            java.time.Duration
+                                                .between(lastSuccessfulPostAt, Instant.now())
+                                                .toMinutes() >= 5
+
+                                    if (shouldSendPost) {
+                                        android.util.Log.i("TmmRelayService", "=== Sending POST request with full payload ===")
+                                        
+                                        // Enrich payload with mobile GPS data before sending
+                                        val enrichedPayload = enrichPayloadWithMobileGps(payload.copy(deviceId = payload.deviceId))
+                                        
+                                        ApiClient.send(
+                                            enrichedPayload,
+                                            apiKey
+                                        ) { timestamp, payloadInfo, success ->
+                                            android.util.Log.i("TmmRelayService", "POST response: $timestamp - $payloadInfo (success=$success)")
+                                            if (success) lastSuccessfulPostAt = Instant.now()
+                                            updateNotificationWithPost(timestamp, payloadInfo)
+                                            updateDynamicStatus()
+                                        }
+                                    } else {
+                                        val minutesSinceLastPost = lastSuccessfulPostAt?.let {
+                                            java.time.Duration.between(it, Instant.now()).toMinutes()
+                                        } ?: 0
+                                        android.util.Log.d("TmmRelayService", "Skipping POST (last post was $minutesSinceLastPost minutes ago, need 5 minutes)")
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("TmmRelayService", "Error in payloadHandler: ${e.message}", e)
+                                }
+                            }
+                            
+                            catalystClient = CatalystClient(
+                                context = this,
+                                onMessage = payloadHandler,
+                                onError = { error ->
+                                    handleCatalystError(error)
+                                },
+                                userTID = userTID
+                            )
+                            android.util.Log.i("TmmRelayService", "CatalystClient created")
                         }
                         
                         android.util.Log.i("TmmRelayService", "Loading subscription...")
