@@ -841,37 +841,13 @@ class CatalystClient(
                         return@Thread
                     }
                 }
-                
-                /* ---------------- Step 7: Check License and Add Event Listener (matching demo MainModel.java lines 629-647) ---------------- */
-                if (retCode.getCode() == DriverReturnCode.Success) {
-                    val sensorPropsRc = facade!!.getSensorProperties()
-                    if (sensorPropsRc.code == DriverReturnCode.Success) {
-                        val sensorProperties = sensorPropsRc.returnedObject
-                        if (sensorProperties.isLicensed()) {
-                            LogCapture.log(Log.INFO, TAG, "✅ Sensor is licensed")
-                            LogCapture.log(Log.INFO, TAG, "Connected to ${sensorProperties.instrumentName}:${sensorProperties.serialNumber}:FW-${sensorProperties.firmware}")
-                            // Add event listener after successful connection and license check (matching demo line 635)
-                            facade!!.addCatalystEventListener(eventListener)
-                        } else {
-                            LogCapture.log(Log.ERROR, TAG, "❌ The instrument is not licensed")
-                            facade!!.disconnectFromSensor()
-                            currentError = "NOT_LICENSED"
-                            onError(RuntimeException("The instrument is not licensed"))
-                            return@Thread
-                        }
-                    } else {
-                        LogCapture.log(Log.ERROR, TAG, "❌ Get sensor properties failed: ${sensorPropsRc.code}")
-                        currentError = "CONNECT_FAILED"
-                        onError(RuntimeException("Get sensor properties failed: ${sensorPropsRc.code}"))
-                        return@Thread
-                    }
-                } else {
-                    LogCapture.log(Log.ERROR, TAG, "❌ Connect failed: ${retCode.getCode()}")
-                    currentError = "CONNECT_FAILED"
-                    onError(RuntimeException("Unable to connect: ${retCode.getCode()}"))
-                    return@Thread
-                }
 
+               
+                /* ---------------- Step 7: Add Event Listener (matching demo MainModel.java lines 629-647) ---------------- */
+                if (retCode.getCode() == DriverReturnCode.Success) {
+                    facade!!.addCatalystEventListener(eventListener)
+                }
+                
                 /* ---------------- Step 8: Set Reduced Antenna Height (matching demo MainModel.java line 656-658) ---------------- */
                 if (retCode.getCode() == DriverReturnCode.Success) {
                     setReducedAntennaHeight()
